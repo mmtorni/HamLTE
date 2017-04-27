@@ -1,0 +1,54 @@
+<BCCH-DL-SCH-Message> <message> <c1>
+<systemInformationBlockType1>
+    <cellAccessRelatedInfo>
+        <plmn-IdentityList>
+            <PLMN-IdentityInfo>
+                <plmn-Identity>
+                    <mcc>
+                        <MCC-MNC-Digit>9</MCC-MNC-Digit>
+                        <MCC-MNC-Digit>0</MCC-MNC-Digit>
+                        <MCC-MNC-Digit>1</MCC-MNC-Digit>
+                    </mcc>
+                    <mnc>
+                        <MCC-MNC-Digit>7</MCC-MNC-Digit>
+                        <MCC-MNC-Digit>0</MCC-MNC-Digit>
+                    </mnc>
+                </plmn-Identity>
+                <cellReservedForOperatorUse><notReserved/></cellReservedForOperatorUse>
+            </PLMN-IdentityInfo>
+        </plmn-IdentityList>
+        <trackingAreaCode>
+            0000000000000001
+        </trackingAreaCode>
+        <cellIdentity>
+            0000000000000000000000000001
+        </cellIdentity>
+        <cellBarred><notBarred/></cellBarred>
+        <intraFreqReselection><allowed/></intraFreqReselection>
+        <csg-Indication><false/></csg-Indication>
+    </cellAccessRelatedInfo>
+    <cellSelectionInfo>
+        <q-RxLevMin>-70</q-RxLevMin>
+    </cellSelectionInfo>
+    <p-Max>3</p-Max>
+    <!--<freqBandIndicator>30</freqBandIndicator> FDD -->
+    <freqBandIndicator>40</freqBandIndicator>
+    <schedulingInfoList>
+	<SchedulingInfo>
+            <si-Periodicity><rf8/></si-Periodicity>
+	    <sib-MappingInfo>
+		    <!-- implicit sibType2 in first SchedulingInfo -->
+		    <sibType9/> <!-- Contains a radio amateur station identifier -->
+	    </sib-MappingInfo>
+        </SchedulingInfo>
+    </schedulingInfoList>
+    <tdd-Config>
+        <subframeAssignment><sa3/></subframeAssignment>
+        <specialSubframePatterns><ssp0/></specialSubframePatterns>
+    </tdd-Config>
+    <si-WindowLength><ms1/></si-WindowLength>
+    <systemInfoValueTag>0</systemInfoValueTag>
+</systemInformationBlockType1>
+    </c1>
+  </message>
+</BCCH-DL-SCH-Message>

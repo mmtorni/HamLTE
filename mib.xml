@@ -1,0 +1,16 @@
+<BCCH-BCH-Message>
+    <message>
+        <dl-Bandwidth><n25/></dl-Bandwidth>
+        <phich-Config>
+            <phich-Duration><normal/></phich-Duration>
+            <phich-Resource><one/></phich-Resource>
+        </phich-Config>
+        <systemFrameNumber>
+            00000000
+        </systemFrameNumber>
+        <schedulingInfoSIB1-BR-r13>0</schedulingInfoSIB1-BR-r13>
+        <spare>
+            00000
+        </spare>
+    </message>
+</BCCH-BCH-Message>

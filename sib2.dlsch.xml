@@ -1,0 +1,110 @@
+<BCCH-DL-SCH-Message>
+      <message>
+                <c1>
+<systemInformation>
+    <criticalExtensions>
+        <systemInformation-r8>
+            <sib-TypeAndInfo>
+<sib2>
+   <ac-BarringInfo>
+     <ac-BarringForEmergency><true/></ac-BarringForEmergency>
+ </ac-BarringInfo>
+    <radioResourceConfigCommon>
+        <rach-ConfigCommon>
+            <preambleInfo>
+                <numberOfRA-Preambles><n4/></numberOfRA-Preambles>
+            </preambleInfo>
+            <powerRampingParameters>
+                <powerRampingStep><dB0/></powerRampingStep>
+                <preambleInitialReceivedTargetPower><dBm-120/></preambleInitialReceivedTargetPower>
+            </powerRampingParameters>
+            <ra-SupervisionInfo>
+                <preambleTransMax><n200/></preambleTransMax>
+                <ra-ResponseWindowSize><sf10/></ra-ResponseWindowSize>
+                <mac-ContentionResolutionTimer><sf8/></mac-ContentionResolutionTimer>
+            </ra-SupervisionInfo>
+            <maxHARQ-Msg3Tx>1</maxHARQ-Msg3Tx>
+        </rach-ConfigCommon>
+        <bcch-Config>
+            <modificationPeriodCoeff><n16/></modificationPeriodCoeff>
+        </bcch-Config>
+        <pcch-Config>
+            <defaultPagingCycle><rf32/></defaultPagingCycle>
+            <nB><fourT/></nB>
+        </pcch-Config>
+        <prach-Config>
+            <rootSequenceIndex>0</rootSequenceIndex>
+            <prach-ConfigInfo>
+                <prach-ConfigIndex>0</prach-ConfigIndex>
+                <highSpeedFlag><false/></highSpeedFlag>
+                <zeroCorrelationZoneConfig>0</zeroCorrelationZoneConfig>
+                <prach-FreqOffset>0</prach-FreqOffset>
+            </prach-ConfigInfo>
+        </prach-Config>
+        <pdsch-ConfigCommon>
+            <referenceSignalPower>-60</referenceSignalPower>
+            <p-b>0</p-b>
+        </pdsch-ConfigCommon>
+        <pusch-ConfigCommon>
+            <pusch-ConfigBasic>
+                <n-SB>1</n-SB>
+                <hoppingMode><interSubFrame/></hoppingMode>
+                <pusch-HoppingOffset>0</pusch-HoppingOffset>
+                <enable64QAM><false/></enable64QAM>
+            </pusch-ConfigBasic>
+            <ul-ReferenceSignalsPUSCH>
+                <groupHoppingEnabled><false/></groupHoppingEnabled>
+                <groupAssignmentPUSCH>0</groupAssignmentPUSCH>
+                <sequenceHoppingEnabled><false/></sequenceHoppingEnabled>
+                <cyclicShift>0</cyclicShift>
+            </ul-ReferenceSignalsPUSCH>
+        </pusch-ConfigCommon>
+        <pucch-ConfigCommon>
+            <deltaPUCCH-Shift><ds1/></deltaPUCCH-Shift>
+            <nRB-CQI>0</nRB-CQI>
+            <nCS-AN>0</nCS-AN>
+            <n1PUCCH-AN>0</n1PUCCH-AN>
+        </pucch-ConfigCommon>
+        <soundingRS-UL-ConfigCommon>
+            <release></release>
+        </soundingRS-UL-ConfigCommon>
+        <uplinkPowerControlCommon>
+            <p0-NominalPUSCH>-126</p0-NominalPUSCH>
+            <alpha><al0/></alpha>
+            <p0-NominalPUCCH>-127</p0-NominalPUCCH>
+            <deltaFList-PUCCH>
+                <deltaF-PUCCH-Format1><deltaF0/></deltaF-PUCCH-Format1>
+                <deltaF-PUCCH-Format1b><deltaF1/></deltaF-PUCCH-Format1b>
+                <deltaF-PUCCH-Format2><deltaF0/></deltaF-PUCCH-Format2>
+                <deltaF-PUCCH-Format2a><deltaF0/></deltaF-PUCCH-Format2a>
+                <deltaF-PUCCH-Format2b><deltaF0/></deltaF-PUCCH-Format2b>
+            </deltaFList-PUCCH>
+            <deltaPreambleMsg3>0</deltaPreambleMsg3>
+        </uplinkPowerControlCommon>
+        <ul-CyclicPrefixLength><len1/></ul-CyclicPrefixLength>
+    </radioResourceConfigCommon>
+    <ue-TimersAndConstants>
+        <t300><ms100/></t300>
+        <t301><ms100/></t301>
+        <t310><ms0/></t310>
+        <n310><n1/></n310>
+        <t311><ms1000/></t311>
+        <n311><n1/></n311>
+    </ue-TimersAndConstants>
+    <freqInfo>
+        <additionalSpectrumEmission>1</additionalSpectrumEmission>
+    </freqInfo>
+    <timeAlignmentTimerCommon><sf500/></timeAlignmentTimerCommon>
+</sib2>
+
+<sib9>
+  <hnb-Name>4f48 3245 5746</hnb-Name> <!-- OH2EWF -->
+</sib9>
+
+            </sib-TypeAndInfo>
+        </systemInformation-r8>
+    </criticalExtensions>
+</systemInformation>
+</c1>
+</message>
+</BCCH-DL-SCH-Message>
