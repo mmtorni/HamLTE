@@ -1,6 +1,9 @@
 # HamLTE
 Open source 4G LTE (EUTRAN) software radio implementation for radio amateurs.
 
+For the radio amateur related parts, also see the OH2TI club LTE base station
+project page (in Finnish) at <https://prkele.prk.tky.fi/w/index.php/HamLTE>
+
 The project consists of:
  * Simplified LTE specifications suitable for radio amateur use
  * Adaptations of LTE to HAM bands (called HamLTE) and narrow bandwidths
