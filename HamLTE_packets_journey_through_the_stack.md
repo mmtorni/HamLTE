@@ -176,18 +176,40 @@ S means Sequence Number. P=1 means status report is requested.
 
 Data packet = 0b10P000SS 0xSS (data)
 
-Also it's possible to multiplex many small packets. E means there's yet another
-length field. There last data packet does not have a length field.
+Also it's possible to multiplex many small packets. L means length field. E
+means there's yet another length field. The last data packet does not have a
+length field and can be longer than 2047 bytes.
 
-Multiplexed data packet = 0b10P001SS 0xSS n\*(0bE 0bLLLLLLLLLLL) (padding bits to byte boundary) n\*(data) (data)
+F=1 means that the first data portion is the last segment of earlier "Segmented data packet". F=0 means that the first data begins a new data packet.
+F=1 means that the last data field (without the length field) is start of a segmented data packet. F=0 the last data packet is a full packet.
+
+With a single packet:
+FF=00 ⇒ Full packet
+FF=01 ⇒ Start of segmented data packet
+FF=11 ⇒ Middle of large packet
+FF=10 ⇒ Last portion of a packet
+
+
+Multiplexed data packet = 0b10PFf1SS 0xSS n\*(0bE 0bLLLLLLLLLLL) (padding bits to byte boundary) n\*(data) (data)
 
 Also segmentation of a large packet is possible. S means Sequence Number. P=1 means status report is requested. FF=01 beginning of packet, FF=11 middle of packet. FF=10 end of packet
 
-Segmented data packet = 0b11PFF0SS 0xSS (data)
+Segmented data packet = 0b10PFF0SS 0xSS (data)
 
 Control packets both report lost packets and segments and acknowledge them. N means serial number of missing packet, A means serial number of acknowledgement. s and e means byte offsets of lost segments. e=-1 means to end of data packet.
 
 Control packet = 0b0000  (0bAAAAAAAAAA E1) (0bNNNNNNNNNN E1 E2) (0bNNNNNNNNNN E1 E2) \*(0bsssssssssssssss 0beeeeeeeeeeeeeee) _TODO: DESCRIBE THIS BETTER_
+
+RLC Acknowledged Mode retransmissions
+-------------------------------------
+If any of the above packets need to be retransmitted, it might be the case that the original packet cannot be sent in full this time due to a current transmission length limit. Then it needs to be resegmented. If these resegmented packets need to be sent yet again, they might need another resegmentation. Unfortunately the Sequence Numbers are already fixed. For this purpose there are resegmentation versions of the above packets. This gets slightly tricky.
+
+F=1 means these bytes are the final bytes of the packet. F=0 means beginning or middle parts. s means starting offset of data.
+
+Resegmented data packet = 0b11P000SS 0xSS 0bFsssssss 0xss (data)
+
+Resegmented multiplexed data packet 
+
 
 RLC Unacknowledged Mode headers
 -------------------------------
