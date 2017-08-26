@@ -180,7 +180,7 @@ Also it's possible to multiplex many small packets. L means length field. E
 means there's yet another length field. The last data packet does not have a
 length field and can be longer than 2047 bytes.
 
-F=1 means that the first data portion is the last segment of earlier "Segmented data packet". F=0 means that the first data begins a new data packet.
+F=1 means that the first data portion is the last segment of earlier "Fragmented data packet". F=0 means that the first data begins a new data packet.
 F=1 means that the last data field (without the length field) is start of a segmented data packet. F=0 the last data packet is a full packet.
 
 With a single packet:
