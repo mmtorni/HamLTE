@@ -192,9 +192,9 @@ FF=10 ⇒ Last portion of a packet
 
 Multiplexed data packet = 0b10PFf1SS 0xSS n\*(0bE 0bLLLLLLLLLLL) (padding bits to byte boundary) n\*(data) (data)
 
-Also segmentation of a large packet is possible. S means Sequence Number. P=1 means status report is requested. FF=01 beginning of packet, FF=11 middle of packet. FF=10 end of packet
+Also fragmentation of a large packet is possible. S means Sequence Number. P=1 means status report is requested. FF=01 beginning of packet, FF=11 middle of packet. FF=10 end of packet
 
-Segmented data packet = 0b10PFF0SS 0xSS (data)
+Fragmented data packet = 0b10PFF0SS 0xSS (data)
 
 Control packets both report lost packets and segments and acknowledge them. N means serial number of missing packet, A means serial number of acknowledgement. s and e means byte offsets of lost segments. e=-1 means to end of data packet.
 
