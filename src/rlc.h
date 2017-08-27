@@ -17,10 +17,6 @@ extern "C" {
     // [64kB] Send poll after every am_poll_pdu_bytes. Set to zero if unwanted.
     uint32_t am_poll_pdu_bytes;
 
-    //LTE name: t-Reordering range: 5-1600ms or off
-    // [35ms] Reordering time window before sending STATUS.
-    size_t timeout_reordering;
-
     //LTE name: t-StatusProhibit range: 5-2400ms or off
     // [35ms] Do not send status messages more often than this (in ms).
     size_t timeout_status_prohibit;
@@ -30,11 +26,22 @@ extern "C" {
     size_t timeout_poll_retransmit;
 
 
+    /******** RLC UM and AM common parameters *********/
+
+    //LTE name: t-Reordering range: 5-1600ms or off
+    // [35ms] Reordering time window before sending STATUS.
+    size_t timeout_reordering;
+
+    
     /******** RLC UM parameters *********/
 
     // Valid choices are 5 (default) and 10
-    size_t um_sequence_number_field_length;
+    size_t um_sequence_number_field_length_when_sending;
+
+    // Valid choices are 5 (default) and 10
+    size_t um_sequence_number_field_length_when_receiving;
   };
+
 
   /******** RLC mode choice *********/
 
@@ -47,6 +54,7 @@ extern "C" {
 #define RLC_MODE_AM 0
 #define RLC_MODE_UM 1
 #define RLC_MODE_TM 2
+
 
   /******** RLC API *********/
   struct rlc_am_state*
