@@ -44,18 +44,24 @@ extern "C" {
     1: in-order, unreliable packet stream, like unreliable SOCK_SEQPACKET
     2: out-of-order, unreliable packet stream, bit like SOCK_DGRAM. Packets go straight through and no fragmentation is done; packet size is restricted to that given by rlc_pdu_send_opportunity
   */
-
+#define RLC_MODE_AM 0
+#define RLC_MODE_UM 1
+#define RLC_MODE_TM 2
 
   /******** RLC API *********/
-  void *  rlc_init() { return new rlc_am_state(); }
-  void    rlc_free(struct rlc_am_state *state) { delete state; }
+  struct rlc_am_state*
+          rlc_init();
+  void    rlc_free(struct rlc_am_state *state);
   // rlc_set resets all protocol state, but leaves parameters and callbacks untouched
   // Default mode is 0=Acknowledged Mode
-  void    rlc_set_mode(int mode);
+  // Returns -1 if mode is invalid and sets errno. Mode is then unchanged
+  int     rlc_set_mode(struct rlc_am_state *state, int mode);
+  int     rlc_get_mode(struct rlc_am_state *state);
   // Parameters may be changed at any time except for mode.
-  int     rlc_set_parameters(struct rlc_am_parameters *parameters) { return 0; }
-  ssize_t rlc_pdu_send_opportunity(unsigned time_in_ms, void *buffer, size_t size) { return -1; }
-  void    rlc_pdu_received(unsigned time_in_ms, void *buffer, size_t size) { }
+  int     rlc_set_parameters(struct rlc_am_state *state, struct rlc_am_parameters *parameters);
+  void    rlc_get_parameters(struct rlc_am_state *state, struct rlc_am_parameters *parameters);
+  ssize_t rlc_pdu_send_opportunity(struct rlc_am_state *state, unsigned time_in_ms, void *buffer, size_t size);
+  void    rlc_pdu_received(struct rlc_am_state *state, unsigned time_in_ms, void *buffer, size_t size);
 
   /******** Callbacks *********/
 
