@@ -1,0 +1,115 @@
+#! /usr/bin/env python3
+from cffi import FFI
+import re, sys, time
+
+print("Usage: rlc_tun_udp <./rlc_implementation.so> [<protocol parameters> ...]")
+print("Connects two RLC implementations back-to-back")
+print("First instance has stdin connected")
+print("Second instance has stdout connected")
+print("rlc.h implementation test")
+
+####################################################################
+
+c_modules = []
+ffi = FFI()
+
+def load_c_module(header, libso):
+  global c_modules
+  L = []
+  for line in open(header).readlines():
+    if re.match(r"#|extern|}", line):
+      continue
+    L.append(line)
+
+  ffi.cdef("".join(L))
+
+  c = ffi.dlopen(libso)
+  c_modules.append(c) # Stash it so it doesn't get lost
+  for name in dir(c):
+    globals()[name] = getattr(c, name)
+
+load_c_module("rlc.h", sys.argv[1])
+
+####################################################################
+
+def envz(*args, **KWargs):
+  L = list(args)
+  L += ["%s=%s" % kv for kv in KWargs.items()]
+  L.append("")
+  return "\0".join(L).encode("UTF-8")
+
+####################################################################
+
+@ffi.callback("rlc_sdu_send_opportunity_fn")
+def sdu_send_opportunity(arg, ms, buf, size):
+  buf = ffi.buffer(buf, size)
+  print("Send opportunity (%d bytes)" % (size,))
+  pdu = b"Hei"
+  buf[0:len(pdu)] = pdu
+  return len(pdu)
+
+@ffi.callback("rlc_sdu_received_fn")
+def sdu_received(arg, ms, buf, size):
+  buf = ffi.buffer(buf, size)[:]
+  print("Received: %s" % (buf.decode("latin1"),))
+
+@ffi.callback("rlc_sdu_delivered_fn")
+def sdu_delivered(arg, ms, buf, size):
+  buf = ffi.buffer(buf, size)[:]
+  print("Delivered: %s" % (buf.decode("latin1"),))
+  pass
+
+
+@ffi.callback("rlc_radio_link_failure_fn")
+def sdu_rlf(arg, ms):
+  pass
+
+
+####################################################################
+
+parameters = envz(*sys.argv[2:], a=3)
+
+rlc1, rlc2 = rlc_init(), rlc_init()
+rlc_am_set_callbacks(rlc1, rlc1, sdu_send_opportunity, sdu_received, sdu_delivered, sdu_rlf)
+rlc_am_set_callbacks(rlc2, rlc2, sdu_send_opportunity, sdu_received, sdu_delivered, sdu_rlf)
+
+if rlc_set_parameters(rlc1, parameters, len(parameters)):
+  print("Setting parameters failed. Exiting.")
+  sys.exit(1)
+rlc_set_parameters(rlc2, parameters, len(parameters))
+
+buf = ffi.new("char[5]")
+ms = 0
+rlc_timer_tick(rlc1, ms)
+rlc_timer_tick(rlc2, ms)
+while True:
+  ms += 1
+  rlc_timer_tick(rlc1, ms)
+  rlc_timer_tick(rlc2, ms)
+  got = rlc_pdu_send_opportunity(rlc1, ms, buf, len(buf))
+  if got != -1:
+    rlc_pdu_received(rlc2, ms, buf, got)
+  else:
+    got = 0
+  pdu = ffi.buffer(buf, got)[:]
+  print("RLC1: Send opportunity retrieved %d bytes: %r" % (got, pdu.decode("latin1")))
+  time.sleep(.250)
+
+  got = rlc_pdu_send_opportunity(rlc2, ms, buf, len(buf))
+
+  if got != -1:
+    rlc_pdu_received(rlc1, ms, buf, len(buf))
+  else:
+    got = 0
+  pdu = ffi.buffer(buf, got)[:]
+  print("RLC2: Send opportunity retrieved %d bytes: %r" % (got, pdu.decode("latin1")))
+  time.sleep(.250)
+  
+  
+rlc_pdu_received(rlc, 0, b"world\n", 5)
+
+# Reset to get final packets, if any
+rlc_reset(rlc)
+
+# Don't bother freeing
+
