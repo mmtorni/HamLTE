@@ -1,20 +1,39 @@
 // 3GPP LTE RLC: 4G Radio Link Control protocol interface
-//
-// TODO: add callbacks for confirming succesful delivery of whole SDU.
-//       That would mean some sort of ID tracking is necessary or
-//       would need to give the whole SDU on callback
+// Parameters for RLC AM
 
-#include <stddef.h> // For size_t
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+const char *const rlc_parameter_names[] =
+{
+  /* RLC mode AM/UM/TM */
+  "rlc/mode",
+  /* AM */
+  "maxRetxThreshold",
+  "pollPDU",
+  "pollByte",
+  "t-StatusProhibit",
+  "t-PollRetransmit",
+  /* AM & UM */
+  "t-Reordering",
+  /* UM */
+  "SN-FieldLength.rx",
+  "SN-FieldLength.tx",
+  /* PDCP */
+  "headerCompression",
+  "pdcp-SN-Size",
+  "statusReportRequired",
+  "discardTimer",
+  "maxCID",
+  "profiles",
+  "pdcp/t-Reordering",
+  "",
+  NULL
+};
 
-  /******** RLC API *********/
-  struct rlc_state;
-  typedef struct rlc_state RLC;
 
   const char *const rlc_parameter_names[];
+  
+  /******** RLC API *********/
+  typedef struct rlc_state RLC;
   RLC *   rlc_init();
   void    rlc_free(RLC *state);
   // rlc_set_mode resets all protocol state, but leaves parameters and callbacks untouched
@@ -33,15 +52,10 @@ extern "C" {
   // Implement these upper layer callbacks.
 
   /* Return -1 if don't want to send a packet */
-  typedef int (*rlc_sdu_send_opportunity_fn)(void *arg, unsigned time_in_ms, void *buffer, size_t size);
-  typedef void (*rlc_sdu_received_fn)(void *arg, unsigned time_in_ms, void *buffer, size_t size);
-  typedef void (*rlc_radio_link_failure_fn)(void *arg, unsigned time_in_ms);
-
-  // If rlf is not given, retransmits will continue forever
-  void    rlc_am_set_callbacks(RLC *state, void *arg,
-			       rlc_sdu_send_opportunity_fn sdu_send,
-			       rlc_sdu_received_fn sdu_recv,
-			       rlc_radio_link_failure_fn rlf);
+  int  rlc_sdu_send_opportunity(void *arg, unsigned time_in_ms, void *buffer, size_t size);
+  void rlc_sdu_received(void *arg, unsigned time_in_ms, void *buffer, size_t size);
+  void rlc_sdu_delivered(void *arg, unsigned time_in_ms, void *buffer, size_t size);
+  void rlc_sdu_radio_link_failure(void *arg, unsigned time_in_ms);
 
 #ifdef __cplusplus
 }
