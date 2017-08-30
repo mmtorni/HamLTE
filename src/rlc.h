@@ -10,7 +10,7 @@ extern "C" {
   struct rlc_state;
   typedef struct rlc_state RLC;
 
-  const char *const rlc_parameter_names[];
+  extern const char *const rlc_parameter_names[];
   RLC *   rlc_init();
   void    rlc_free(RLC *state);
   // rlc_reset resets all protocol state like calling rlc_init()
