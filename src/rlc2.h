@@ -12,7 +12,14 @@ extern "C" {
   struct rlc_instance;
   typedef struct rlc_instance RLC;
   struct rlc_instance {
-    RLC *(*clone)(void *arg);
+    /* BOILERPLATE */
+    /* Create a similar copy of this instance, with a new arg */
+    RLC *(*clone)(RLC *rlc, void *new_arg);
+    /* Use this to free this instance */
+    void (*free)(RLC *rlc);
+
+    /* INTERFACE */
+
     int     (*set_parameters)(RLC *rlc, const char *envz, size_t envz_len);
     void    (*get_parameters)(RLC *rlc, char **envz, size_t *envz_len);
     int     (*send_opportunity)(RLC *state, unsigned time_in_ms, void *buffer, size_t size);
@@ -28,9 +35,9 @@ extern "C" {
      * sdu_received / sdu_delivered (non-time-critical)
      * sdu_timer_tick(time+1)
      */
-    /* Return -1 if don't want to send a packet */
     void    *arg;
 
+    /* Return -1 if don't want to send a packet */
     int  (*sdu_send_opportunity)(void *arg, unsigned time_in_ms, void *buffer, size_t size);
     void (*sdu_received)(void *arg, unsigned time_in_ms, void *buffer, size_t size);
     void (*sdu_delivered)(void *arg, unsigned time_in_ms, void *buffer, size_t size);
@@ -165,6 +172,11 @@ main(int argc, char **argv) {
     return 1;
   }
   /* CREATE PROTOCOL INSTANCE, passing given parameters on command line plus defaults */
-  return rlc_example(rlc, envz, envz_len);
+  int retval = rlc_example(rlc, envz, envz_len);
+  /* FREE PROTOCOL INSTANCE */
+  rlc->free(rlc);
+  rlc = NULL;
+
+  return retval;
 }
 #endif // example
