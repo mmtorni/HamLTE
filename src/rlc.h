@@ -15,12 +15,13 @@ extern "C" {
   void    rlc_free(RLC *state);
   // rlc_reset resets all protocol state like calling rlc_init()
   // but leaves parameters and callbacks untouched
-  // Returns -1 if parameters are invalid and sets errno. Mode is then undefined
-  int     rlc_reset(RLC *state);
+  void    rlc_reset(RLC *state);
+  // Returns -1 if parameters are invalid and sets errno. State is then undefined
+  // until the next call to rlc_set_parameters
   int     rlc_set_parameters(RLC *state, const char *envz, size_t envz_len);
   /* Returns -1 if doesn't want to or can't send a packet */
   int     rlc_pdu_send_opportunity(RLC *state, unsigned time_in_ms, void *buffer, int size);
-  void    rlc_pdu_received(RLC *state, unsigned time_in_ms, void *buffer, int size);
+  void    rlc_pdu_received(RLC *state, unsigned time_in_ms, const void *buffer, int size);
   // rlc_timer_tick: Use this to do slow work. Call radio_link_failure
   // callback for example or shuffle buffers
   void    rlc_timer_tick(RLC *state, unsigned time_in_ms);
@@ -31,8 +32,8 @@ extern "C" {
 
   /* Return -1 if don't want to send a packet */
   typedef int (*rlc_sdu_send_opportunity_fn)(void *arg, unsigned time_in_ms, void *buffer, size_t size);
-  typedef void (*rlc_sdu_received_fn)(void *arg, unsigned time_in_ms, void *buffer, size_t size);
-  typedef void (*rlc_sdu_delivered_fn)(void *arg, unsigned time_in_ms, void *buffer, size_t size);
+  typedef void (*rlc_sdu_received_fn)(void *arg, unsigned time_in_ms, const void *buffer, size_t size);
+  typedef void (*rlc_sdu_delivered_fn)(void *arg, unsigned time_in_ms, const void *buffer, size_t size);
   typedef void (*rlc_radio_link_failure_fn)(void *arg, unsigned time_in_ms);
 
   // If rlf is not given, retransmits will continue forever
