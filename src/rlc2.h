@@ -40,10 +40,6 @@ extern "C" {
     void *reserved[16]; /* Space for future callbacks */
   };
 
-  RLC *rlc_am_create();
-  RLC *rlc_tejeez_create();
-  RLC *rlc_ax25_create();
-  RLC *rlc_tm_create();
 #ifdef __cplusplus
 }
 #endif
@@ -129,6 +125,16 @@ static char *const defaults[] = {
 };
 
 /*********************************************************************
+ ** Declarations of protocol instance constructors to be defined elsewhere
+ **/
+
+RLC *rlc_am_create();
+RLC *rlc_tejeez_create();
+RLC *rlc_ax25_create();
+RLC *rlc_tm_create();
+
+
+/*********************************************************************
  ** HOW TO USE: create protocol instance and get parameters from command line
  **/
 
@@ -142,10 +148,18 @@ main(int argc, char **argv) {
 
   RLC *rlc;
   char *proto = envz_get(envz, envz_len, "protocol");
-  if(strcmp(proto, "lte_rlc-am") == 0) {
+  if(strcmp(proto, "lte-rlc-tm") == 0) {
+    rlc = rlc_tm_create();
+  else if(strcmp(proto, "lte-rlc-am") == 0) {
     rlc = rlc_am_create();
+  else if(strcmp(proto, "lte-rlc-um") == 0) {
+    rlc = rlc_am_create();
+    // rlc_am could also read this setting from "protocol" itself
+    envz_add(&envz, &envz_len, "mode", "UM");
   } else if(strcmp("proto", "tejeez") == 0) {
     rlc = rlc_tejeez_create();
+  } else if(strcmp("proto", "ax25") == 0) {
+    rlc = rlc_ax25_create();
   } else {
     fprintf(stderr, "Invalid protocol specified: %s\n", proto);
     return 1;
