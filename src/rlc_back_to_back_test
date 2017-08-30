@@ -2,11 +2,14 @@
 from cffi import FFI
 import re, sys, time
 
-print("Usage: rlc_tun_udp <./rlc_implementation.so> [<protocol parameters> ...]")
-print("Connects two RLC implementations back-to-back")
-print("First instance has stdin connected")
-print("Second instance has stdout connected")
-print("rlc.h implementation test")
+print("""\
+Usage: rlc_back_to_back_test <./rlc_implementation.so> [<protocol parameters> ...]
+rlc.h implementation test
+Connects two RLC implementations back-to-back, sending three
+byte "Hei" messages" constantly. It reports all rlc.h callback calls.
+The implementation must be a dlopenable shared library object which
+defines all symbols mentioned in rlc.h.
+""")
 
 ####################################################################
 
