@@ -39,7 +39,7 @@ extern "C" {
   void    rlc_am_set_callbacks(RLC *state, void *arg,
 			       rlc_sdu_send_opportunity_fn sdu_send,
 			       rlc_sdu_received_fn sdu_recv,
-			       rlc_sdu_delivered_fn sdu_recv,
+			       rlc_sdu_delivered_fn sdu_delivered,
 			       rlc_radio_link_failure_fn rlf);
 
 #ifdef __cplusplus
