@@ -66,7 +66,7 @@ struct sequence_number {
   static constexpr unsigned width = WidthInBits;
   unsigned value; // This needs to be unsigned to avoid C/C++ undefined behaviour
   sequence_number() : value(0) { }
-  sequence_number(unsigned i) : value(i%(1<<WidthInBits)) { }
+  sequence_number(unsigned i) : value(i%(1u<<WidthInBits)) { }
   sequence_number operator+(int i) const { return value + (unsigned)i; }
   sequence_number &operator+=(int i) { return *this = (*this + i); }
   sequence_number operator++(int) { return this->value++; }
@@ -78,7 +78,16 @@ struct sequence_number {
   bool operator>=(sequence_number<WidthInBits> rhs) const { return !(*this < rhs); }
   bool operator!=(sequence_number<WidthInBits> rhs) const { return value != rhs.value; }
   bool operator==(sequence_number<WidthInBits> rhs) const { return value == rhs.value; }
-  int operator-(sequence_number<WidthInBits> rhs) const { return (int)(value - rhs.value); }
+  int operator-(sequence_number<WidthInBits> rhs) const { return difference_to_int(value - rhs.value); }
+protected:
+  int difference_to_int(unsigned result) const {
+      unsigned sign_mask = ~0u ^ ((1u<<WidthInBits)-1u);
+      if (result & (1u<<(WidthInBits-1)))
+	result |= sign_mask;
+      else
+	result &= ~sign_mask;
+      return (int)result;
+  }
 };
 
 template <unsigned WidthInBits>
