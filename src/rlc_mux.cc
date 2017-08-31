@@ -651,7 +651,9 @@ rlc_am_handle_status(rlc_am_tx_state &tx, packet &pdu_status) {
   // This involves figuring out which SDUs were completely
   // transferred by that PDU.
   rlc_am_sn sn;
-  for(sn = tx.lowest_unacknowledged_sequence_number; has_key(tx.in_flight, sn); ++sn) {
+  for(sn = tx.lowest_unacknowledged_sequence_number; sn < ack_sn; ++sn) {
+    if (!has_key(tx.in_flight, sn)) break;
+    if (!has_key(acks, sn)) break;
     auto &pdu = tx.in_flight[sn].pdu;
     if (pdu.f0 && !(pdu.f1 && pdu.sdus.size() == 1)) {
       tx.delivered_sdus.push(pdu.first_partial_sdu);
