@@ -179,7 +179,7 @@ struct rlc_am_tx_pdu_contents {
     size_t pieces = sdus.size() + with_extra_packet_count;
     if(pieces == 0)
       return 0;
-    return bits_to_bytes(16+16*(segment_offset!=-1)+12*(max(0u,pieces-1)));
+    return bits_to_bytes(16+16*(segment_offset!=-1)+12*(max((size_t)0,pieces-1)));
   }
   size_t total_size() const { return header_size() + payload_size(); }
   bool room_for_more() {
@@ -634,11 +634,11 @@ rlc_am_handle_status(rlc_am_tx_state &tx, packet &pdu_status) {
 
   // Figure out which PDUs in transit were ACKed
   std::set<rlc_am_sn> acks;
-  BOOST_FOREACH(auto &pdup, tx.in_flight) {
-    if (pdup.first < ack_sn
-	&& !has_key(all_nacks, pdup.first)
-	&& !pdup.second.delivered)
-      acks.insert(pdup.first);
+  for(rlc_am_sn sn = tx.lowest_unacknowledged_sequence_number; sn < ack_sn; ++sn) {
+    if (!has_key(all_nacks, sn)
+	&& has_key(tx.in_flight, sn)
+	&& !tx.in_flight[sn].delivered)
+      acks.insert(sn);
   }
   // Now we got the NACKs and ACKs sorted out, update delivery status
   std::set<rlc_am_sn> just_delivered;
@@ -653,7 +653,7 @@ rlc_am_handle_status(rlc_am_tx_state &tx, packet &pdu_status) {
   rlc_am_sn sn;
   for(sn = tx.lowest_unacknowledged_sequence_number; sn < ack_sn; ++sn) {
     if (!has_key(tx.in_flight, sn)) break;
-    if (!has_key(acks, sn)) break;
+    if (!tx.in_flight[sn].delivered)  break;
     auto &pdu = tx.in_flight[sn].pdu;
     if (pdu.f0 && !(pdu.f1 && pdu.sdus.size() == 1)) {
       tx.delivered_sdus.push(pdu.first_partial_sdu);
