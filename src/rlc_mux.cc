@@ -76,22 +76,31 @@ struct timer {
     if (timeout_in_ms) {
       m_running = true; started_at_time_in_ms = time_in_ms;
       m_ringing = false;
-      cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) started" << endl;
+      if (rlc_debug & 2) {
+	cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) started" << endl;
+      }
     } else {
     }
   }
   void stop() {
     m_running = false;
-    cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) stopped" << endl;
+    if (rlc_debug & 2) {
+      cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) stopped" << endl;
+    }
   }
   void reset() {
     m_ringing = false;
-    cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) reset" << endl;
+    if (rlc_debug & 2) {
+      cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) reset" << endl;
+    }
   }
   void update(unsigned time_in_ms_) {
     time_in_ms = time_in_ms_;
     if(m_running && (time_in_ms - started_at_time_in_ms >= (int)timeout_in_ms)) {
-      cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) expired" << endl;
+      if (rlc_debug & 2) {
+
+	cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) expired" << endl;
+      }
       m_ringing = true;
       m_running = false;
     }
