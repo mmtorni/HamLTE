@@ -61,7 +61,7 @@ using std::endl;
 #define RLC_AM_WINDOW_SIZE  (1<<(RLC_AM_SEQUENCE_NUMBER_FIELD_SIZE-1))
 
 
-
+static bool rlc_debug = false;
 
 
 
@@ -319,7 +319,7 @@ struct rlc_am_rx_state {
   /* Reordering queue */
   unsigned am_window_size;
   rlc_am_sn lowest_sequence_number; // == VR(R)
-  std::unordered_map<rlc_am_sn, packet> reordering_queue;
+  std::map<rlc_am_sn, packet> reordering_queue;
   timer t_Reordering = "t-Reordering"; // Configurable
   rlc_am_sn highest_seen_plus_1; // VR(H)
   rlc_am_sn timer_reordering_trigger_plus_1; // VR(X)
@@ -668,26 +668,31 @@ rlc_am_parse_status(packet &pdu_status, vector<rlc_am_nack> &nacks) {
 static bool
 rlc_am_handle_status(rlc_am_tx_state &tx, packet &pdu_status) {
   vector<rlc_am_nack> nacks;
-  vector<rlc_am_sn> acks;
   rlc_am_sn ack_sn = rlc_am_parse_status(pdu_status, nacks);
 
   std::set<rlc_am_sn> all_nacks;
   BOOST_FOREACH(auto nack, nacks) { all_nacks.insert(nack.sn); }
 
-  // Now we got the NACKs and ACKs sorted out, update tx state
-
-  // Process all ACKs
-  BOOST_FOREACH(auto &pdu, tx.in_flight | map_values) {
-    if (!has_key(all_nacks, pdu.pdu.sn) && !pdu.delivered) {
-      // It's an ACK
-      pdu.retx_requested = false;
-      pdu.delivered = true;
-      acks.push_back(pdu.pdu.sn);
-    }
+  // Figure out which PDUs in transit were ACKed
+  std::set<rlc_am_sn> acks;
+  BOOST_FOREACH(auto &pdup, tx.in_flight) {
+    if (pdup.first < ack_sn
+	&& !has_key(all_nacks, pdup.first)
+	&& !pdup.second.delivered)
+      acks.insert(pdup.first);
+  }
+  // Now we got the NACKs and ACKs sorted out, update delivery status
+  std::set<rlc_am_sn> just_delivered;
+  BOOST_FOREACH(auto &sn, acks) {
+    tx.in_flight[sn].retx_requested = false;
+    tx.in_flight[sn].delivered = true;
+    just_delivered.insert(sn);
   }
   // Indicate delivery of all in-sequence ACKed packets
+  // This involves figuring out which SDUs were completely
+  // transferred by that PDU.
   rlc_am_sn sn;
-  for(sn = tx.lowest_unacknowledged_sequence_number; has_key(tx.in_flight, sn) && tx.in_flight[sn].delivered; ++sn) {
+  for(sn = tx.lowest_unacknowledged_sequence_number; has_key(tx.in_flight, sn); ++sn) {
     auto &pdu = tx.in_flight[sn].pdu;
     if (pdu.f0 && !(pdu.f1 && pdu.sdus.size() == 1)) {
       tx.delivered_sdus.push(pdu.first_partial_sdu);
@@ -697,6 +702,7 @@ rlc_am_handle_status(rlc_am_tx_state &tx, packet &pdu_status) {
     }
     tx.in_flight.erase(sn);
   }
+  // Update lower edge of tx window
   tx.lowest_unacknowledged_sequence_number = sn;
   //Add retransmit requests
   BOOST_FOREACH(rlc_am_sn sn, all_nacks) {
@@ -710,24 +716,38 @@ rlc_am_handle_status(rlc_am_tx_state &tx, packet &pdu_status) {
     if (nack.reseg && has_key(tx.in_flight, nack.sn))
       tx.in_flight[nack.sn].retx_ranges.push_back(nack.segment);
   }
-  cerr << "\e[1mSTATUS RECEIVED: (raw ACK_SN=" << ack_sn.value << ") ACK=";
-  BOOST_FOREACH(auto sn, acks) { cerr << sn.value << " "; }
-  cerr << "NACK=\e[32m";
-  BOOST_FOREACH(auto nack, nacks) {
-    assert(nack.segment.first < 30000);
-    cerr << nack.sn.value;
-    if (nack.reseg) {
-      cerr << ":" << nack.segment.first << "-";
-      if (nack.segment.second != 32767) { //TODO: change this once SO==16bits
-	cerr << nack.segment.second;
+  // Print debugging output
+  if (rlc_debug) {
+    cerr << "\e[1mSTATUS RECEIVED: (raw ACK_SN=" << ack_sn.value << ") ACK=";
+    BOOST_FOREACH(auto sn, acks) { cerr << sn.value << " "; }
+    cerr << "NACK=\e[32m";
+    BOOST_FOREACH(auto nack, nacks) {
+      assert(nack.segment.first < 30000);
+      cerr << nack.sn.value;
+      if (nack.reseg) {
+	cerr << ":" << nack.segment.first << "-";
+	if (nack.segment.second != 32767) { //TODO: change this once SO==16bits
+	  cerr << nack.segment.second;
+	}
       }
+      cerr << " ";
     }
-    cerr << " ";
+    cerr << "\e[0m" << endl;
   }
-  cerr << "\e[0m" << endl;
   // Do we have a reply to our latest POLL?
   if(tx.last_poll_sn < ack_sn || has_key(all_nacks, tx.last_poll_sn)) {
     tx.t_PollRetransmit.stop();
+  }
+  // Did we pass our t-Reordering water mark
+  auto &rx = *tx.rx_state;
+  if(rx.VR_X() == rx.VR_R() || (!rx.in_receive_window(rx.VR_X()) && rx.VR_X() != rx.VR_MR())) {
+    tx.rx_state->t_Reordering.stop();
+    tx.rx_state->t_Reordering.reset();
+  }
+  // Do we need to start t-Reordering?
+  if(rx.VR_H() > rx.VR_R()) {
+    tx.rx_state->t_Reordering.stop();
+    tx.rx_state->t_Reordering.reset();
   }
   return true;
 }
@@ -818,6 +838,7 @@ am_status_continue_nack_segment(bits &header, rlc_am_sn nack_sequence_number, in
 
 static void
 am_status_begin(bits &header, rlc_am_sn ack_sequence_number, bool ext) {
+  assert(ack_sequence_number != 1023);
   header += f<1>(0) + f<3>(0);
   header += ack_sequence_number;
   header += f<1>(ext);
@@ -984,11 +1005,18 @@ rlc_am_mux_transmit(rlc_am_tx_state &state, size_t requested_bytes, std::functio
  **/
 static packet
 rlc_am_make_packet(rlc_am_tx_state &state, size_t requested_bytes, std::function<packet(size_t)> pull_sdu) {
+  //TODO: Do housekeeping; Update rx reordering timer
+  
   // Priority 1: STATUS REPORTS
-  if (state.status_requested && !state.rx_state->t_StatusProhibit.running()) {
-    state.rx_state->t_StatusProhibit.start();
-    state.status_requested = false;
-    return rlc_am_make_status_pdu(*state.rx_state, requested_bytes);
+  auto &rx = *state.rx_state;
+  if (!rx.t_StatusProhibit.running()) {
+    if (state.status_requested || rx.t_Reordering.ringing()) {
+      rx.t_StatusProhibit.start();
+      if (rx.t_Reordering.ringing())
+	rx.t_Reordering.start();
+      state.status_requested = false;
+      return rlc_am_make_status_pdu(rx, requested_bytes);
+    }
   }
   // Priority 2: RETRANSMISSIONS
   if (state.need_retransmission()) {
@@ -1002,10 +1030,10 @@ rlc_am_make_packet(rlc_am_tx_state &state, size_t requested_bytes, std::function
     // Window is full... Either wait for ACK or retransmit a packet with POLL
     if (state.t_PollRetransmit.ringing()) {
       //TODO: FIND A PACKET FOR POLL
-      for(rlc_am_sn sn = state.next_sequence_number - 1; sn - state.lowest_unacknowledged_sequence_number >= 0; --sn) {
+      BOOST_REVERSE_FOREACH(auto &pdu, state.in_flight | map_values) {
 	//TODO: Probably should find a packet which doesn't require resegmentation
-	if(has_key(state.in_flight, sn) && !state.in_flight[sn].delivered) {
-	  state.in_flight[sn].retx_requested = true;
+	if(!pdu.delivered) {
+	  pdu.retx_requested = true;
 	  return rlc_am_mux_retransmit(state, requested_bytes);
 	}
       }
@@ -1173,7 +1201,7 @@ rlc_free(RLC *rlc) {
   free(rlc);
 }
 static const char *default_parameters = ""
-"rlc/mode=AM maxRetxThreshold=4 pollPDU=8 pollByte=1024 t-Reordering=35"
+"rlc/mode=AM rlc/debug=0 maxRetxThreshold=4 pollPDU=8 pollByte=1024 t-Reordering=35"
 " t-StatusProhibit=5 t-PollRetransmit=5";
 
 #define ENVZ_INT(name) atoi(envz_get(envz, envz_len, name))
@@ -1195,6 +1223,7 @@ rlc_set_parameters(RLC *rlc, const char *envz_more, size_t envz_more_len) {
   rlc->state.rx.t_StatusProhibit.set_timeout(ENVZ_INT("t-StatusProhibit"));
 
   rlc->state.rx.t_Reordering.set_timeout(ENVZ_INT("t-Reordering"));
+  rlc_debug = ENVZ_INT("rlc/debug");
   return 0;
 }
 
