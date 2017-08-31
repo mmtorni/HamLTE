@@ -94,3 +94,10 @@ namespace std {
 }
 
 static unsigned bits_to_bytes(int bits) { return (bits + 7) / 8; }
+
+template <class Container, typename T>
+static auto
+sum(const Container&c, T init) {
+  return boost::accumulate(c, init);
+}
+
