@@ -48,16 +48,21 @@ def arg_to_name(arg):
   global rlc1
   return ["RLC1", "RLC2"][arg == rlc2]
 
+running_numbers = [0,0]
+
 @ffi.callback("rlc_sdu_send_opportunity_fn")
 def sdu_send_opportunity(arg, ms, buf, size):
   buf = ffi.buffer(buf, size)
-  pdu = "Hei" + "0123456789"[randint(0, 9)]
+  num = running_numbers[arg == rlc2]
+  running_numbers[arg == rlc2] += 1
+  pdu = "Hei" + str(num)
   pdu = pdu.encode("UTF-8")
   if arg == rlc2:
-    pdu = b""
+    #pdu = b""
     print("        %s<-: Requested SDU (max %d bytes): %s" % (arg_to_name(arg), size, pdu))
-    return -1
-  print("->%s          : Requested SDU (max %d bytes): %s" % (arg_to_name(arg), size, pdu))
+    #return -1
+  else:
+    print("->%s          : Requested SDU (max %d bytes): %s" % (arg_to_name(arg), size, pdu))
   buf[0:len(pdu)] = pdu
   return len(pdu)
 
