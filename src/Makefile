@@ -5,7 +5,7 @@ LDFLAGS=-g
 
 .PHONY : all
 
-all: rlc_mux rlc_tm.so
+all: rlc_mux.so rlc_tm.so
 
 %: %.cc
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(LOADLIBES) $(LDFLAGS) -lstdc++ $^ -o $@

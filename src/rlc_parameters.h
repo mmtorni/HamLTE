@@ -8,6 +8,7 @@ const char *const rlc_parameter_names[] =
   "rlc/mode",
   /* AM */
   "maxRetxThreshold",
+  "amWindowSize",
   "pollPDU",
   "pollByte",
   "t-StatusProhibit",

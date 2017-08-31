@@ -69,17 +69,42 @@ typedef sequence_number<RLC_AM_SEQUENCE_NUMBER_FIELD_SIZE> rlc_am_sn;
 
 
 struct timer {
-  unsigned time_in_ms;
+  const char *name;
+  timer(const char *name_ = NULL) : name(name_), time_in_ms(0), m_running(false), m_ringing(false), timeout_in_ms(0) {}
+  void start() {
+    if (timeout_in_ms) {
+      m_running = true; started_at_time_in_ms = time_in_ms;
+      m_ringing = false;
+      cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) started" << endl;
+    } else {
+    }
+  }
+  void stop() {
+    m_running = false;
+    cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) stopped" << endl;
+  }
+  void reset() {
+    m_ringing = false;
+    cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) reset" << endl;
+  }
+  void update(unsigned time_in_ms_) {
+    time_in_ms = time_in_ms_;
+    if(m_running && (time_in_ms - started_at_time_in_ms >= (int)timeout_in_ms)) {
+      cerr << "Timer(" << (name?:"") << "=" << timeout_in_ms << "ms) expired" << endl;
+      m_ringing = true;
+      m_running = false;
+    }
+  }
+  bool running() const { return m_running; }
+  bool ringing() const { return m_ringing; }
+
+  void set_timeout(unsigned timeout_in_ms) { this->timeout_in_ms = timeout_in_ms; }
+protected:
+  sequence_number<31> time_in_ms;
   bool m_running;
   bool m_ringing;
-  timer() : m_running(false), m_ringing(false) {}
-  sequence_number<31> expiry_at_time_in_ms;
-  void start_timeout(unsigned timeout_in_ms) { m_running = true; expiry_at_time_in_ms = time_in_ms + timeout_in_ms; }
-  void stop() { m_running = false; }
-  void reset() { m_ringing = false; }
-  void update(unsigned time_in_ms) { if(m_running && ((expiry_at_time_in_ms - time_in_ms) >= 0)) { m_ringing = true; stop(); } }
-  bool running() { update(time_in_ms); return m_running; }
-  bool ringing() { update(time_in_ms); return m_ringing; }
+  unsigned timeout_in_ms;
+  sequence_number<31> started_at_time_in_ms;
 };
 
 
@@ -121,11 +146,11 @@ typedef vector<packet> packetq;
 struct rx_pdu_incomplete {
   packet data;
   packet known_bytes;
+  packet sdu_boundaries;
   bool length_is_known;
   rx_pdu_incomplete() : length_is_known(false) {}
   bool is_complete() const { return (length_is_known && sum(known_bytes, 0u) == known_bytes.size()); }
-  bool add(size_t segment_offset, bool end_is_included, const packet &segment);
-  bool add(const packet &pdu) { assert(!"not implemented"); }
+  bool add(packet &pdu);
   std::pair<size_t, size_t> next_unknown_range(size_t segment_offset = 0) const;
 };
 
@@ -148,12 +173,6 @@ rx_pdu_incomplete::next_unknown_range(size_t segment_offset) const {
   return std::pair<size_t, size_t>(start, end);
 }
 
-struct tx_pdu_state {
-  packet data;
-  size_t retx_count;
-
-};
-
 struct rlc_am_nack {
   rlc_am_sn sn;
   bool reseg;
@@ -168,14 +187,15 @@ struct rlc_am_tx_pdu_contents {
   bool poll;
   bool f0, f1;
   vector<packet> sdus;
-  
+
   /* These two fields are not filled in when decoding */
   packet first_partial_sdu; // if(f0) First full packet, wire part of packet in sdus[0]
   size_t first_partial_sdu_offset; // Part where wire part started in this PDU
 
-  rlc_am_tx_pdu_contents() : sn(0), poll(false), f0(false), f1(false), first_partial_sdu_offset(0), max_size(0), segment_offset(-1), last_segment(false) {}
+  rlc_am_tx_pdu_contents() : sn(0), poll(false), f0(false), f1(false), first_partial_sdu_offset(0), segment_offset(-1), max_size(0), last_segment(false) {}
   void start(std::pair<size_t, packet> &initial_state, rlc_am_sn sn, size_t max_size);
-  packet resegment(size_t max_size, std::pair<size_t, size_t> range) const;
+  rlc_am_tx_pdu_contents
+       resegment(size_t max_size, std::pair<size_t, size_t> range) const;
   void add_sdu(packet sdu);
   void finalize(std::pair<size_t, packet> &initial_state);
   packet encode() const;
@@ -188,23 +208,20 @@ struct rlc_am_tx_pdu_contents {
   }
   size_t total_size() const { return header_size() + payload_size(); }
   bool room_for_more() {
-    if(max_size < 2) return false;
     if(f1) return false;
-    if(sdus.size() == 0) return true;
-    if(sdus.back().size() > 2047) return false;
+    if(!sdus.empty() && sdus.back().size() > 2047) return false;
     return (payload_size() + 1 + header_size(1) <= max_size);
   }
   void decode(packet &pdu);
 
- private:
-  size_t max_size;
   ssize_t segment_offset;
+  size_t max_size;
   bool last_segment;
 };
 
 
 
- 
+
 struct rlc_am_tx_pdu_state {
   rlc_am_tx_pdu_contents pdu;
   size_t retx_count;
@@ -221,9 +238,9 @@ struct rlc_am_tx_state {
   rlc_am_sn status_requested_sn;
   size_t bytes_without_poll;
   size_t pdu_without_poll;
-  
+
   rlc_am_sn last_poll_sn;
-  timer timer_poll_retransmit;
+  timer t_PollRetransmit = ("t-PollRetransmit");
 
   /* Single fragmented SDU in progress */
   std::pair<size_t, packet> sdu_in_progress; // Packet and offset
@@ -236,13 +253,12 @@ struct rlc_am_tx_state {
   size_t am_max_retx_threshold;
   size_t max_bytes_without_poll;
   size_t max_pdu_without_poll;
-  size_t t_PollRetransmit;
-  size_t t_StatusProhibit;
+  size_t am_window_size;
 
-  bool can_send_new_packet() const { return next_sequence_number - lowest_unacknowledged_sequence_number >= 0; }
+  bool is_window_full() const { return next_sequence_number - lowest_unacknowledged_sequence_number >= (int)am_window_size; }
 
   /* Retransmission */
-  std::unordered_map<rlc_am_sn, rlc_am_tx_pdu_state> in_flight;
+  std::map<rlc_am_sn, rlc_am_tx_pdu_state> in_flight;
 
   /* Delivery indication required and then done! */
   std::queue<packet> delivered_sdus;
@@ -256,6 +272,8 @@ struct rlc_am_tx_state {
 
   /* Helper functions to interpret state and parameters listed above */
   bool want_poll() const {
+    if (is_window_full() || t_PollRetransmit.ringing())
+      return true;
     return (pdu_without_poll >= max_pdu_without_poll ||
 	    bytes_without_poll >= max_bytes_without_poll)
       && !have_data_to_send();
@@ -269,6 +287,14 @@ struct rlc_am_tx_state {
 			});
     //TODO: Really need this for performance      || sdu_peek_buffer();
   }
+  void poll_sent(rlc_am_sn sn) {
+    pdu_without_poll = 0;
+    bytes_without_poll = 0;
+    last_poll_sn = sn;
+    t_PollRetransmit.reset();
+    t_PollRetransmit.start();
+  }
+
 
   /* Boilerplate */
 
@@ -283,27 +309,27 @@ struct rlc_am_tx_state {
 
   /* Support same notation as 3GPP LTE RLC specification */
   rlc_am_sn VT_A() { return lowest_unacknowledged_sequence_number; }
-  rlc_am_sn VT_MS() { return VT_A() + RLC_AM_WINDOW_SIZE; }
+  rlc_am_sn VT_MS() { return VT_A() + am_window_size; }
   rlc_am_sn VT_S() { return next_sequence_number; }
   rlc_am_sn POLL_SN() { return last_poll_sn; }
-  
+
 };
 
 struct rlc_am_rx_state {
   /* Reordering queue */
-  unsigned window_size;
+  unsigned am_window_size;
   rlc_am_sn lowest_sequence_number; // == VR(R)
   std::unordered_map<rlc_am_sn, packet> reordering_queue;
-  timer timer_reordering;
+  timer t_Reordering = "t-Reordering"; // Configurable
   rlc_am_sn highest_seen_plus_1; // VR(H)
   rlc_am_sn timer_reordering_trigger_plus_1; // VR(X)
 
-  /* Resegmentation queue */
+  /* ation queue */
   std::unordered_map<rlc_am_sn, rx_pdu_incomplete> resegmentation_queue;
 
   /* Status feedback */
-  timer timer_status_prohibit;
   rlc_am_tx_state *tx_state;
+  timer t_StatusProhibit = "t-StatusProhibit";    // Configurable
 
   /* Fragmentation state */
   packet partial_packet;
@@ -311,13 +337,14 @@ struct rlc_am_rx_state {
   /* Everything ready */
   std::queue<packet> sdus;
 
+
   rlc_am_rx_state() {}
   // This function calculates VR(R) <= SN  < VR(MR)
   bool in_receive_window(rlc_am_sn sn) const { return sn - lowest_sequence_number >= 0; }
 
   /* Support same notation as 3GPP LTE RLC specification */
   rlc_am_sn VR_R() { return lowest_sequence_number; }
-  rlc_am_sn VR_MR() { return VR_R() + RLC_AM_WINDOW_SIZE; }
+  rlc_am_sn VR_MR() { return VR_R() + am_window_size; }
   rlc_am_sn VR_X() { return timer_reordering_trigger_plus_1; }
 
   rlc_am_sn VR_MS() { assert(!"not implemented"); } // "highest possible value of the SN which can be indicated by “ACK_SN” when a STATUS PDU needs to be constructed."
@@ -333,26 +360,44 @@ struct rlc_am_state {
     //TODO: Set parameters
   }
   void set_time(unsigned time_in_ms) {
-    rx.timer_reordering.update(time_in_ms);
-    rx.timer_status_prohibit.update(time_in_ms);
-    tx.timer_poll_retransmit.update(time_in_ms);
+    rx.t_Reordering.update(time_in_ms);
+    rx.t_StatusProhibit.update(time_in_ms);
+    tx.t_PollRetransmit.update(time_in_ms);
   }
 };
 
 
 
 bool
-rx_pdu_incomplete::add(size_t segment_offset, bool end_is_included, const packet &segment) {
-  size_t size = clamp(segment_offset + segment.size(), data.size(), INT_MAX);
-  length_is_known |= end_is_included;
-  if(!length_is_known) {
-    data.resize(size);
-    known_bytes.resize(size);
+rx_pdu_incomplete::add(packet &pdu_) {
+  //TODO: Piece together SDU boundaries
+  rlc_am_tx_pdu_contents pdu;
+  unsigned known_before = boost::accumulate(known_bytes, 0u);
+  pdu.decode(pdu_);
+  size_t sostart = pdu.segment_offset;
+  size_t soend = pdu.segment_offset + pdu.payload_size();
+  size_t size = clamp(soend, data.size(), INT_MAX);
+  data.resize(size);
+  known_bytes.resize(size);
+  sdu_boundaries.resize(size + 1);
+
+  if (pdu.last_segment)
+    length_is_known = true;
+
+  // Mark known bytes
+  for(size_t i = sostart; i != soend; ++i) {
+    known_bytes[i] = true;
   }
-  unsigned orig = boost::accumulate(known_bytes, 0u);
-  boost::copy(segment, data.begin() + segment_offset);
-  boost::fill(known_bytes | sliced(segment_offset, segment_offset + segment.size()), true);
-  return (orig != boost::accumulate(known_bytes, 0u));
+  // Mark known boundaries
+  size_t ofs = sostart + pdu.f0 * pdu.sdus[0].size();
+  for(size_t i = pdu.f0; i != pdu.sdus.size(); ++i) {
+    sdu_boundaries[ofs] = true;
+    ofs += pdu.sdus[i].size();
+  }
+  if (pdu.f1 == false) {
+    sdu_boundaries[ofs] = true;
+  }
+  return known_before != boost::accumulate(known_bytes, 0u);
 }
 
 void
@@ -360,6 +405,8 @@ rlc_am_tx_pdu_contents::start(std::pair<size_t, packet> &initial_state, rlc_am_s
   this->sn = sn;
   this->max_size = max_size;
   if (initial_state.first) {
+    if (!room_for_more())
+      return;
     f0 = true;
     auto &sdu = initial_state.second;
     first_partial_sdu = sdu;
@@ -368,45 +415,56 @@ rlc_am_tx_pdu_contents::start(std::pair<size_t, packet> &initial_state, rlc_am_s
     size_t len = sdus.back().size();
     if (max_size - header_size() < len) {
       f1 = true;
-      sdus[0].erase(sdus[0].begin() + len, sdus[0].end());
     }
   }
 }
 
-packet
+rlc_am_tx_pdu_contents
 rlc_am_tx_pdu_contents::resegment(size_t max_size, std::pair<size_t, size_t> range) const {
   rlc_am_tx_pdu_contents pdu;
-  pdu.segment_offset = range.first;
+  pdu.segment_offset = range.first; // Set segment_offset the first thing
+  pdu.max_size = max_size;
+  if(!pdu.room_for_more())
+    return pdu;
+
   range.second = min(payload_size(), range.second);
   const size_t segment_size = range.second - range.first;
   size_t skip = range.first;
   bool initialized = false;
-  std::pair<size_t, packet> initial_state;
   // Skip to beginning of range
-  auto sdup = sdus.begin();
-  for(sdup = sdus.begin(); sdup != sdus.end(); ++sdup) {
-    const auto &sdu = *sdup;
+  BOOST_FOREACH(const auto &sdu, sdus) {
     if (skip >= sdu.size()) {
       skip -= sdu.size();
       continue;
     }
+    if (!pdu.room_for_more())
+      break;
+
     if (!initialized) {
       initialized = true;
-      initial_state.first = skip;
-      initial_state.second = sdu;
-      pdu.start(initial_state, sn, max_size);
+      if (skip) {
+	std::pair<size_t, packet> initial_state;
+	initial_state.first = skip;
+	initial_state.second = sdu;
+	pdu.start(initial_state, sn, max_size);
+      } else {
+	std::pair<size_t, packet> initial_state;
+	initial_state.first = 0;
+	initial_state.second = empty_packet;
+	pdu.start(initial_state, sn, max_size);
+	pdu.add_sdu(sdu);
+      }
     } else {
       pdu.add_sdu(sdu);
     }
-    if (!pdu.room_for_more())
-      break;
     if (pdu.payload_size() >= segment_size) {
-      pdu.max_size = pdu.header_size() + segment_size;
+      break;
     }
   }
+  std::pair<size_t, packet> initial_state;
   pdu.finalize(initial_state);
   pdu.last_segment = (range.first + pdu.payload_size() == payload_size());
-  return pdu.encode();
+  return pdu;
 }
 
 void
@@ -416,25 +474,23 @@ rlc_am_tx_pdu_contents::add_sdu(packet sdu) {
 
 void
 rlc_am_tx_pdu_contents::finalize(std::pair<size_t, packet> &initial_state) {
-  if(total_size() > max_size) {
-    if (sdus.size() == 1 && first_partial_sdu.empty()) {
-      first_partial_sdu = sdus[0];
-    }
-    size_t overflow = total_size() - max_size;
-    sdus[0].erase(sdus[0].end() - overflow, sdus[0].end());
-    f1 = true;
+  if (sdus.size() == 0)
+    return;
+  int overflow = max((int)total_size() - (int)max_size, 0);
+  f1 = overflow > 0;
+  auto &last_sdu = sdus.back();
+  assert(overflow < (int)last_sdu.size());
+  // Special case for single fragment
+  if (sdus.size() == 1 && f0 && f1) {
+    initial_state.first += last_sdu.size() - overflow;
+    last_sdu = packet(last_sdu.begin(), last_sdu.end() - overflow);
+    return;
   }
-  size_t end_offset = 0;
   if (f1) {
-    end_offset = sdus.back().size();
-    if (sdus.size() == 1) {
-      end_offset += first_partial_sdu_offset;
-      initial_state = make_pair(end_offset, first_partial_sdu);
-    } else {
-      initial_state = make_pair(end_offset, sdus.back());
-    }
+    initial_state = make_pair(last_sdu.size() - overflow, last_sdu);
+    last_sdu = packet(last_sdu.begin(), last_sdu.end() - overflow);
   } else {
-    initial_state = make_pair((size_t)0, empty_packet);
+    initial_state = make_pair(0, empty_packet);
   }
 }
 
@@ -451,6 +507,10 @@ rlc_am_tx_pdu_contents::finalize(std::pair<size_t, packet> &initial_state) {
 static rlc_am_tx_pdu_contents
 rlc_am_mux_sdus(std::pair<size_t, packet> &initial_state, rlc_am_sn sn, size_t requested_bytes, std::function<packet(size_t)> pull_sdu) {
   rlc_am_tx_pdu_contents pdu;
+  pdu.max_size = requested_bytes;
+  if (!pdu.room_for_more()) {
+    return pdu;
+  }
   pdu.start(initial_state, sn, requested_bytes);
   while (pdu.room_for_more()) {
     auto sdu = pull_sdu(MAX_SDU_SIZE);
@@ -481,7 +541,7 @@ rlc_am_tx_pdu_contents::encode() const {
 
   bool reseg = (segment_offset != -1);
   auto fi = f<1>(f0) + f<1>(f1);
-  
+
   // Mandatory header
   header += f<1>(1) + f<1>(reseg) + f<1>(poll) + fi + f<1>(sdus.size() > 1);
   header.push_bits(RLC_AM_SEQUENCE_NUMBER_FIELD_SIZE, sn.value);
@@ -515,19 +575,19 @@ static void
 rlc_am_rx_process_in_sequence(rlc_am_rx_state &rx, packet &pdu_) {
   rlc_am_tx_pdu_contents pdu;
   pdu.decode(pdu_);
+  assert(pdu.payload_size() > 0); // For debugging, might allow 0-length SDUs later
 
   if (pdu.f0 && pdu.f1 && pdu.sdus.size() == 1) {
-    boost::copy(pdu.sdus.back(), std::back_inserter(rx.partial_packet));
+    boost::copy(pdu.sdus.front(), std::back_inserter(rx.partial_packet));
     return;
   }
   if (pdu.f0) {
-    boost::copy(pdu.sdus.back(), std::back_inserter(rx.partial_packet));
+    boost::copy(pdu.sdus.front(), std::back_inserter(rx.partial_packet));
     rx.sdus.push(rx.partial_packet);
-    rx.partial_packet = packet();
+    rx.partial_packet = empty_packet;
   }
-  if (pdu.f0 + pdu.f1 > (int)pdu.sdus.size()) {
-    std::for_each(pdu.sdus.begin() + pdu.f0, pdu.sdus.end() - pdu.f1,
-		  [&rx](auto &a) { rx.sdus.push(a); });
+  for(int i = pdu.f0; i < (int)pdu.sdus.size() - pdu.f1; ++i) {
+    rx.sdus.push(pdu.sdus[i]);
   }
 
   if (pdu.f1) {
@@ -535,10 +595,10 @@ rlc_am_rx_process_in_sequence(rlc_am_rx_state &rx, packet &pdu_) {
   }
 }
 
-// New data has been added to state. Update state machine and construct PDUs
+// New data has been added to state. Update state machine and construct SDUs
 static void
 rlc_am_rx_new_data(rlc_am_rx_state &rx) {
-  for(rlc_am_sn sn = rx.lowest_sequence_number; sn != rx.highest_seen_plus_1; sn++) {
+  for(rlc_am_sn sn = rx.lowest_sequence_number; sn != rx.highest_seen_plus_1; ++sn) {
     auto p = rx.reordering_queue.find(sn);
     if(p == rx.reordering_queue.end())
       break;
@@ -581,9 +641,11 @@ rlc_am_parse_status(packet &pdu_status, vector<rlc_am_nack> &nacks) {
     rlc_am_sn nack_sn = header/rlc_am_sn::width;
     ext = header/1;
     if (header/1) {
-      nacks.push_back(rlc_am_nack(nack_sn,
-				  header/RLC_AM_SEGMENT_OFFSET_SIZE,
-				  header/RLC_AM_SEGMENT_OFFSET_SIZE));
+      size_t start = header/RLC_AM_SEGMENT_OFFSET_SIZE;
+      size_t end = header/RLC_AM_SEGMENT_OFFSET_SIZE;
+      nacks.push_back(rlc_am_nack(nack_sn, start, end));
+    } else {
+      nacks.push_back(nack_sn);
     }
   }
   return ack_sn;
@@ -606,6 +668,7 @@ rlc_am_parse_status(packet &pdu_status, vector<rlc_am_nack> &nacks) {
 static bool
 rlc_am_handle_status(rlc_am_tx_state &tx, packet &pdu_status) {
   vector<rlc_am_nack> nacks;
+  vector<rlc_am_sn> acks;
   rlc_am_sn ack_sn = rlc_am_parse_status(pdu_status, nacks);
 
   std::set<rlc_am_sn> all_nacks;
@@ -614,16 +677,17 @@ rlc_am_handle_status(rlc_am_tx_state &tx, packet &pdu_status) {
   // Now we got the NACKs and ACKs sorted out, update tx state
 
   // Process all ACKs
-  for(auto sn = tx.lowest_unacknowledged_sequence_number; sn != ack_sn; ++sn) {
-    // Is it a NACK or ACK?
-    if(!has_key(all_nacks, sn)) {
+  BOOST_FOREACH(auto &pdu, tx.in_flight | map_values) {
+    if (!has_key(all_nacks, pdu.pdu.sn) && !pdu.delivered) {
       // It's an ACK
-      tx.in_flight[sn].retx_requested = false;
-      tx.in_flight[sn].delivered = true;
+      pdu.retx_requested = false;
+      pdu.delivered = true;
+      acks.push_back(pdu.pdu.sn);
     }
   }
   // Indicate delivery of all in-sequence ACKed packets
-  for(auto sn = tx.lowest_unacknowledged_sequence_number; tx.in_flight[sn].delivered; ++sn) {
+  rlc_am_sn sn;
+  for(sn = tx.lowest_unacknowledged_sequence_number; has_key(tx.in_flight, sn) && tx.in_flight[sn].delivered; ++sn) {
     auto &pdu = tx.in_flight[sn].pdu;
     if (pdu.f0 && !(pdu.f1 && pdu.sdus.size() == 1)) {
       tx.delivered_sdus.push(pdu.first_partial_sdu);
@@ -632,21 +696,38 @@ rlc_am_handle_status(rlc_am_tx_state &tx, packet &pdu_status) {
       tx.delivered_sdus.push(pdu.sdus[i]);
     }
     tx.in_flight.erase(sn);
-    tx.lowest_unacknowledged_sequence_number = sn;
   }
+  tx.lowest_unacknowledged_sequence_number = sn;
   //Add retransmit requests
   BOOST_FOREACH(rlc_am_sn sn, all_nacks) {
-    tx.in_flight[sn].request_retx();
-    tx.in_flight[sn].retx_ranges.clear();
+    if (has_key(tx.in_flight, sn)) {
+      tx.in_flight[sn].request_retx();
+      tx.in_flight[sn].retx_ranges.clear();
+    }
   }
   // Add retransmit byte ranges requested
   BOOST_FOREACH(rlc_am_nack nack, nacks) {
-    if (nack.reseg)
+    if (nack.reseg && has_key(tx.in_flight, nack.sn))
       tx.in_flight[nack.sn].retx_ranges.push_back(nack.segment);
   }
+  cerr << "\e[1mSTATUS RECEIVED: (raw ACK_SN=" << ack_sn.value << ") ACK=";
+  BOOST_FOREACH(auto sn, acks) { cerr << sn.value << " "; }
+  cerr << "NACK=\e[32m";
+  BOOST_FOREACH(auto nack, nacks) {
+    assert(nack.segment.first < 30000);
+    cerr << nack.sn.value;
+    if (nack.reseg) {
+      cerr << ":" << nack.segment.first << "-";
+      if (nack.segment.second != 32767) { //TODO: change this once SO==16bits
+	cerr << nack.segment.second;
+      }
+    }
+    cerr << " ";
+  }
+  cerr << "\e[0m" << endl;
   // Do we have a reply to our latest POLL?
   if(tx.last_poll_sn < ack_sn || has_key(all_nacks, tx.last_poll_sn)) {
-    tx.timer_poll_retransmit.stop();
+    tx.t_PollRetransmit.stop();
   }
   return true;
 }
@@ -678,13 +759,27 @@ rlc_am_rx_new_packet(rlc_am_rx_state &rx, packet &pdu) {
     ipdu.add(pdu);
     if(ipdu.is_complete()) {
       rx.reordering_queue[sn] = ipdu.data;
-      rx.highest_seen_plus_1 = sn + 1;
       rx.resegmentation_queue.erase(sn);
     }
   } else {
     rx.reordering_queue[sn] = pdu;
-    rx.highest_seen_plus_1 = sn + 1;
   }
+  if (rx.highest_seen_plus_1 < sn + 1)
+    rx.highest_seen_plus_1 = sn + 1;
+
+  if (rx.timer_reordering_trigger_plus_1 == rx.lowest_sequence_number ||
+      (!rx.in_receive_window(rx.timer_reordering_trigger_plus_1) &&
+       rx.timer_reordering_trigger_plus_1 != rx.VR_MR())) {
+    rx.t_Reordering.stop();
+    rx.t_Reordering.reset();
+  }
+  if (!rx.t_Reordering.running()) {
+    if (rx.lowest_sequence_number < rx.highest_seen_plus_1) {
+      rx.t_Reordering.start();
+      rx.timer_reordering_trigger_plus_1 = rx.highest_seen_plus_1;
+    }
+  }
+
   // Look through reordering queue if we can make progress
   rlc_am_rx_new_data(rx);
 
@@ -715,6 +810,8 @@ am_status_continue_nack_segment(bits &header, rlc_am_sn nack_sequence_number, in
   // continue_nack_segment
   header += nack_sequence_number;
   header += f<1>(ext) + f<1>(1);
+  assert((unsigned)segment_offset_start < 30000u);
+
   header += f<RLC_AM_SEGMENT_OFFSET_SIZE>(segment_offset_start);
   header += f<RLC_AM_SEGMENT_OFFSET_SIZE>(segment_offset_end);
 }
@@ -747,30 +844,37 @@ rlc_am_make_status_pdu(rlc_am_rx_state &rx, size_t requested_bytes) {
     if(has_key(rx.resegmentation_queue, sn)) {
       const auto &pdu_incomplete = rx.resegmentation_queue[sn];
       for(size_t segment_offset = 0; /**/; /**/) {
-	if (bits_to_bytes(RLC_AM_STATUS_CONTINUE_NACK_SEGMENT_SIZE - total_size) > requested_bytes) {
+	if (bits_to_bytes(RLC_AM_STATUS_CONTINUE_NACK_SEGMENT_SIZE + total_size) > requested_bytes) {
 	  goto no_more_room;
 	}
+	total_size += RLC_AM_STATUS_CONTINUE_NACK_SEGMENT_SIZE;
 	auto segment = pdu_incomplete.next_unknown_range(segment_offset);
+	if (segment.first == (size_t)-1)
+	  break;
+
 	nacks.push_back(rlc_am_nack(sn, segment.first, segment.second));
 	if (segment.second == (size_t)-1)
 	  break;
+	segment_offset = segment.second;
       }
-    } else if(has_key(rx.reordering_queue, sn)) {
-      if (bits_to_bytes(RLC_AM_STATUS_CONTINUE_NACK_SIZE - total_size) > requested_bytes) {
+    } else if(!has_key(rx.reordering_queue, sn)) {
+      if (bits_to_bytes(RLC_AM_STATUS_CONTINUE_NACK_SIZE + total_size) > requested_bytes) {
 	goto no_more_room;
       }
-      nacks.push_back(rlc_am_nack(sn));
+      total_size += RLC_AM_STATUS_CONTINUE_NACK_SIZE;
+      nacks.push_back(sn);
     }
   }
  no_more_room:
   // Calculate ACK_SN
-  for(/**/; sn != rx.highest_seen_plus_1; sn++) {
+  for(/**/; sn != rx.highest_seen_plus_1; ++sn) {
     if(has_key(rx.resegmentation_queue, sn))
       break;
     if(!has_key(rx.reordering_queue, sn))
       break;
   }
   rlc_am_sn ack_point = sn;
+  assert(!(ack_point < rx.lowest_sequence_number));
   rx.tx_state->status_requested = false;
 
   // Now encode the status packet
@@ -790,11 +894,17 @@ rlc_am_make_status_pdu(rlc_am_rx_state &rx, size_t requested_bytes) {
   }
   //TODO:am_status_continue_nack_segment(header, nack, start, end);
   bits_pad_to_octet(header);
+  BOOST_FOREACH(uint8_t byte, pdu) {
+    if (byte == 0xff) {
+      cerr << "byte == 0xff" << endl;
+    }
+  }
   return pdu;
 }
 
 static packet
 rlc_am_mux_retransmit(rlc_am_tx_state &state, size_t requested_bytes) {
+  // Start
   BOOST_FOREACH(auto &pdupair, state.in_flight) {
     auto &pdu = pdupair.second;
     if (pdu.retx_requested) {
@@ -803,6 +913,10 @@ rlc_am_mux_retransmit(rlc_am_tx_state &state, size_t requested_bytes) {
 	  // Simple case: retransmit as-is
 	  pdu.retx_requested = false;
 	  //TODO: Add POLL flag?
+	  if (state.want_poll()) {
+	    pdu.pdu.poll = true;
+	    state.poll_sent(pdu.pdu.sn);
+	  }
 	  return pdu.pdu.encode();
 	}
 	// Resegmentation case
@@ -813,7 +927,22 @@ rlc_am_mux_retransmit(rlc_am_tx_state &state, size_t requested_bytes) {
       pdu.retx_ranges.pop_front();
 
       //TODO: Add POLL flag?
-      return pdu.pdu.resegment(requested_bytes, range);
+      auto rpdu = pdu.pdu.resegment(requested_bytes, range);
+      if (rpdu.total_size() == 0) {
+	// requested_bytes is too small for a segmented PDU
+	return empty_packet;
+      }
+      if (rpdu.payload_size() < (range.second - range.first)) {
+	pdu.retx_ranges.push_front(std::make_pair(range.first + rpdu.payload_size(), range.second));
+      }
+      if (pdu.retx_ranges.empty()) {
+	pdu.retx_requested = false;
+      }
+      if (state.want_poll()) {
+	rpdu.poll = true;
+	state.poll_sent(rpdu.sn);
+      }
+      return rpdu.encode();
     }
   }
   //NOTREACHED
@@ -823,23 +952,25 @@ rlc_am_mux_retransmit(rlc_am_tx_state &state, size_t requested_bytes) {
 static packet
 rlc_am_mux_transmit(rlc_am_tx_state &state, size_t requested_bytes, std::function<packet(size_t)> pull_sdu) {
   auto pdu = rlc_am_mux_sdus(state.sdu_in_progress,
-			     state.next_sequence_number++,
+			     state.next_sequence_number,
 			     requested_bytes,
 			     pull_sdu);
+  if(pdu.total_size() == 0)
+    return empty_packet;
+
+  assert(pdu.payload_size() > 0); // For debugging. Might allow 0-length SDUs later
+
+  ++state.next_sequence_number;
+
   state.pdu_without_poll += 1;
   state.bytes_without_poll += pdu.payload_size();
 
   if (state.want_poll()) {
     //TODO: Set POLL flag?
+    state.poll_sent(pdu.sn);
     pdu.poll = true;
-    state.pdu_without_poll = 0;
-    state.bytes_without_poll = 0;
-    state.last_poll_sn = pdu.sn;
-    state.timer_poll_retransmit.start_timeout(state.t_PollRetransmit);
   }
 
-  if(pdu.total_size() == 0)
-    return empty_packet;
   state.in_flight[pdu.sn].pdu = pdu;
   return pdu.encode();
 }
@@ -854,8 +985,8 @@ rlc_am_mux_transmit(rlc_am_tx_state &state, size_t requested_bytes, std::functio
 static packet
 rlc_am_make_packet(rlc_am_tx_state &state, size_t requested_bytes, std::function<packet(size_t)> pull_sdu) {
   // Priority 1: STATUS REPORTS
-  if (state.status_requested && !state.rx_state->timer_status_prohibit.running()) {
-    state.rx_state->timer_status_prohibit.start_timeout(state.t_StatusProhibit);
+  if (state.status_requested && !state.rx_state->t_StatusProhibit.running()) {
+    state.rx_state->t_StatusProhibit.start();
     state.status_requested = false;
     return rlc_am_make_status_pdu(*state.rx_state, requested_bytes);
   }
@@ -865,8 +996,21 @@ rlc_am_make_packet(rlc_am_tx_state &state, size_t requested_bytes, std::function
   }
   // Priority 3: NEW DATA
   // Check if we have space in send window
-  if (state.can_send_new_packet()) {
+  if (!state.is_window_full()) {
     return rlc_am_mux_transmit(state, requested_bytes, pull_sdu);
+  } else {
+    // Window is full... Either wait for ACK or retransmit a packet with POLL
+    if (state.t_PollRetransmit.ringing()) {
+      //TODO: FIND A PACKET FOR POLL
+      for(rlc_am_sn sn = state.next_sequence_number - 1; sn - state.lowest_unacknowledged_sequence_number >= 0; --sn) {
+	//TODO: Probably should find a packet which doesn't require resegmentation
+	if(has_key(state.in_flight, sn) && !state.in_flight[sn].delivered) {
+	  state.in_flight[sn].retx_requested = true;
+	  return rlc_am_mux_retransmit(state, requested_bytes);
+	}
+      }
+      assert(state.lowest_unacknowledged_sequence_number == state.next_sequence_number);
+    }
   }
   // Nothing to send
   return empty_packet;
@@ -909,14 +1053,14 @@ rlc_am_tx_pdu_contents::decode(packet &pdu) {
     last_segment = header/1;
     segment_offset = header/RLC_AM_SEGMENT_OFFSET_SIZE;
   }
-  
+
   while(ext) {
     ext = header/1;
     sdus.push_back(packet(header/RLC_AM_LENGTH_FIELD_SIZE));
   }
   size_t data_offset = bits_to_bytes(header.read_offset);
   size_t implicit_length = pdu.size() - data_offset -
-    boost::accumulate(sdus, 0, [](size_t a, auto &b) { return a + b.size(); });
+    boost::accumulate(sdus, 0, [](int a, auto &b) { return a + (int)b.size(); });
   sdus.push_back(packet(implicit_length));
   uint8_t *p = pdu.data() + data_offset;
   BOOST_FOREACH(auto &sdu, sdus) {
@@ -1002,6 +1146,9 @@ rlc_am_decode_packet(rlc_am_rx_state &rx, packet &pdu) {
 /********************************************************************/
 /********************************************************************/
 
+#include <argz.h>
+#include <envz.h>
+#include <cstdlib>
 #include "rlc_parameters.h"
 
 struct rlc_state {
@@ -1025,14 +1172,35 @@ void
 rlc_free(RLC *rlc) {
   free(rlc);
 }
+static const char *default_parameters = ""
+"rlc/mode=AM maxRetxThreshold=4 pollPDU=8 pollByte=1024 t-Reordering=35"
+" t-StatusProhibit=5 t-PollRetransmit=5";
+
+#define ENVZ_INT(name) atoi(envz_get(envz, envz_len, name))
+#define ENVZ_SET_INT(name, i) (sprintf(intbuf, "%d", (i)), envz_add(&envz, &envz_len, name, intbuf))
 
 int
-rlc_set_parameters(RLC *rlc, const char *envz, size_t envz_len) {
+rlc_set_parameters(RLC *rlc, const char *envz_more, size_t envz_more_len) {
+  char *envz = NULL; size_t envz_len = 0;
+  char intbuf[32];
+  argz_create_sep(default_parameters, ' ', &envz, &envz_len);
+  ENVZ_SET_INT("amWindowSize", RLC_AM_WINDOW_SIZE);
+  envz_merge(&envz, &envz_len, envz_more, envz_more_len, true);
+  rlc->state.tx.max_pdu_without_poll = ENVZ_INT("pollPDU");
+  rlc->state.tx.max_bytes_without_poll = ENVZ_INT("pollByte");
+  rlc->state.tx.am_max_retx_threshold = ENVZ_INT("maxRetxThreshold");
+  rlc->state.tx.am_window_size = ENVZ_INT("amWindowSize");
+  rlc->state.rx.am_window_size = ENVZ_INT("amWindowSize");
+  rlc->state.tx.t_PollRetransmit.set_timeout(ENVZ_INT("t-PollRetransmit"));
+  rlc->state.rx.t_StatusProhibit.set_timeout(ENVZ_INT("t-StatusProhibit"));
+
+  rlc->state.rx.t_Reordering.set_timeout(ENVZ_INT("t-Reordering"));
   return 0;
 }
 
 int
 rlc_pdu_send_opportunity(RLC *rlc, unsigned time_in_ms, void *buffer, int size) {
+  rlc->state.set_time(time_in_ms);
   auto pull = [=](size_t max_size) {
     packet sdu(max_size);
     int size = rlc->sdu_send(rlc->arg, time_in_ms, sdu.data(), max_size);
@@ -1050,6 +1218,7 @@ rlc_pdu_send_opportunity(RLC *rlc, unsigned time_in_ms, void *buffer, int size) 
 
 void
 rlc_pdu_received(RLC *rlc, unsigned time_in_ms, const void *buffer, int size) {
+  rlc->state.set_time(time_in_ms);
   uint8_t *buf = (uint8_t *)buffer;
   packet pdu(buf, buf + size);
   rlc_am_rx_new_packet(rlc->state.rx, pdu);
@@ -1068,7 +1237,7 @@ rlc_pdu_received(RLC *rlc, unsigned time_in_ms, const void *buffer, int size) {
     auto &sdus = rlc->state.tx.delivered_sdus;
     while (!sdus.empty()) {
       const auto &sdu = sdus.front();
-      rlc->sdu_recv(rlc->arg, time_in_ms, sdu.data(), sdu.size());
+      rlc->sdu_delivered(rlc->arg, time_in_ms, sdu.data(), sdu.size());
       sdus.pop();
     }
   }
@@ -1084,6 +1253,6 @@ rlc_am_set_callbacks(RLC *rlc, void *arg, rlc_sdu_send_opportunity_fn sdu_send, 
 }
 
 void
-rlc_timer_tick(RLC *state, unsigned time_in_ms) {
-  
+rlc_timer_tick(RLC *rlc, unsigned time_in_ms) {
+  rlc->state.set_time(time_in_ms);
 }
