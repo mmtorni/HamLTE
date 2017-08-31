@@ -6,6 +6,7 @@ const char *const rlc_parameter_names[] =
 {
   /* RLC mode AM/UM/TM */
   "rlc/mode",
+  "rlc/debug",
   /* AM */
   "maxRetxThreshold",
   "amWindowSize",
