@@ -33,7 +33,7 @@ struct bits {
   f<1> read_bits() { return read_bit(); }
   template <unsigned WidthInBits>
   f<WidthInBits> read_bits() { return read_bit() + read_bits<WidthInBits-1>(); }
-  
+
   unsigned operator/(unsigned n_bits) {
     unsigned value = 0;
     while (n_bits--) { value = (value<<1) | read_bit(); }
@@ -68,14 +68,12 @@ struct sequence_number {
   sequence_number() : value(0) { }
   sequence_number(unsigned i) : value(i%(1<<WidthInBits)) { }
   sequence_number operator+(int i) const { return sequence_number<WidthInBits>(value + i); }
-  sequence_number &operator+=(int i) { return *this = (*this + 1u); }
+  sequence_number &operator+=(int i) { return *this = (*this + i); }
   sequence_number operator++(int) { return this->value++; }
-  sequence_number &operator++() { ++value; return *this; }
+  sequence_number &operator++() { *this += 1; return *this; }
+  sequence_number &operator--() { *this += -1; return *this; }
   bool operator<(sequence_number<WidthInBits> rhs_) const {
-    unsigned lhs = value, rhs = rhs_.value;
-    if(rhs < lhs)
-      rhs = rhs + (1<< WidthInBits);
-    return (lhs - rhs >= (1<<(WidthInBits-1)));
+    return rhs_ - *this > 0;
   }
   bool operator<=(sequence_number<WidthInBits> rhs) const { return value == rhs.value || *this < rhs; }
   bool operator!=(sequence_number<WidthInBits> rhs) const { return value != rhs.value; }
