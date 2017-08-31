@@ -7,12 +7,11 @@ static int clamp(int number, int low, int high) {
   return number;
 }
 
-template <class Container, class Key>
+template <class Container, typename Key>
 bool
-has_key(Container &container, const Key &key) {
-  return container.find(key) != container.end();
+has_key(Container &container, Key &&key) {
+  return container.find(std::forward<Key>(key)) != container.end();
 }
 
-#define min(a, b) (((a)<(b))?(a):(b))
-#define max(a, b) (((b)<(a))?(a):(b))
-
+using std::min;
+using std::max;
