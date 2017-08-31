@@ -67,15 +67,15 @@ struct sequence_number {
   unsigned value; // This needs to be unsigned to avoid C/C++ undefined behaviour
   sequence_number() : value(0) { }
   sequence_number(unsigned i) : value(i%(1<<WidthInBits)) { }
-  sequence_number operator+(int i) const { return sequence_number<WidthInBits>(value + i); }
+  sequence_number operator+(int i) const { return value + (unsigned)i; }
   sequence_number &operator+=(int i) { return *this = (*this + i); }
   sequence_number operator++(int) { return this->value++; }
   sequence_number &operator++() { *this += 1; return *this; }
   sequence_number &operator--() { *this += -1; return *this; }
-  bool operator<(sequence_number<WidthInBits> rhs_) const {
-    return rhs_ - *this > 0;
-  }
-  bool operator<=(sequence_number<WidthInBits> rhs) const { return value == rhs.value || *this < rhs; }
+  bool operator<(sequence_number<WidthInBits> rhs) const { return rhs - *this > 0; }
+  bool operator>(sequence_number<WidthInBits> rhs) const { return rhs < *this; }
+  bool operator<=(sequence_number<WidthInBits> rhs) const { return !(*this > rhs); }
+  bool operator>=(sequence_number<WidthInBits> rhs) const { return !(*this < rhs); }
   bool operator!=(sequence_number<WidthInBits> rhs) const { return value != rhs.value; }
   bool operator==(sequence_number<WidthInBits> rhs) const { return value == rhs.value; }
   int operator-(sequence_number<WidthInBits> rhs) const { return (int)(value - rhs.value); }
