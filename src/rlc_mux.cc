@@ -776,7 +776,7 @@ am_status_continue_nack_segment(bits &header, rlc_am_sn nack_sequence_number, in
 
 static void
 am_status_begin(bits &header, rlc_am_sn ack_sequence_number, bool ext) {
-  assert(ack_sequence_number != 1023);
+  //assert(ack_sequence_number != 1023);
   header += f<1>(0) + f<3>(0);
   header += ack_sequence_number;
   header += f<1>(ext);
