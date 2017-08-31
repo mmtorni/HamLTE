@@ -5,6 +5,7 @@
   TODO: Only 10 bit sequence numbers and 15 bit segment offsets are implemented
   TODO: Only 11 bit length fields are implemented
   TODO: Retransmit and poll timers
+  TODO: Sequence numbers sometimes get stuck at 1023 (highest value)
  */
 #include <cstdio>
 #include <cstdint>
@@ -107,42 +108,6 @@ protected:
   sequence_number<31> started_at_time_in_ms;
 };
 
-
-
-static packet
-packet_slice(const vector<uint8_t> &pkt, int start = 0, int end = INT_MAX) {
-  start = clamp(start, 0, pkt.size());
-  end = clamp(end, 0, pkt.size());
-  return vector<uint8_t>(&pkt[start], &pkt[end]);
-}
-
-static packet
-make_mux_am_header(rlc_am_sn next_sequence_number, unsigned fi, const vector<packet> &output_queue) {
-  bits header(NULL);
-  if(output_queue.empty()) return vector<uint8_t>();
-  // Mandatory header
-  header += f<1>(1) + f<1>(0) + f<1>(0) + f<2>(fi) + f<1>(output_queue.size() > 1);
-  header.push_bits(RLC_AM_SEQUENCE_NUMBER_FIELD_SIZE, next_sequence_number.value);
-
-  for(size_t i = 0; output_queue.size() - i > 1; ++i) {
-    header += f<1>(output_queue.size() - i > 2);
-    assert(output_queue[i].size() < (1 << RLC_AM_LENGTH_FIELD_SIZE));
-    header.push_bits(RLC_AM_LENGTH_FIELD_SIZE, output_queue[i].size());
-  }
-  // Last sdu continues to end of packet and has implicit length
-  // Pad to octet boundary
-  bits_pad_to_octet(header);
-  return packet(&header.data[0], &header.data[bits_to_bytes(header.write_offset)]);
-}
-
-template <class Container, typename T>
-static auto
-sum(const Container&c, T init) {
-  return std::accumulate(c.begin(), c.end(), init);
-}
-
-typedef vector<packet> packetq;
-
 struct rx_pdu_incomplete {
   packet data;
   packet known_bytes;
@@ -180,6 +145,7 @@ struct rlc_am_nack {
   rlc_am_nack(rlc_am_sn sn_) : sn(sn_), reseg(false) {}
   rlc_am_nack(rlc_am_sn sn_, size_t start, size_t end) : sn(sn_), reseg(true), segment(start, end) {}
 };
+
 struct rlc_am_rx_state;
 
 struct rlc_am_tx_pdu_contents {
@@ -614,22 +580,6 @@ static bool rlc_am_is_reseg(const packet &pdu) { return !rlc_am_is_control(pdu) 
 static rlc_am_sn rlc_am_get_sn(const packet &pdu) { return ((pdu[0]<<8)|pdu[1]) & ((1<<rlc_am_sn::width)-1); }
 static bool rlc_am_get_poll(const packet &pdu) { return !rlc_am_is_control(pdu) && !!(pdu[0] & 0x20); }
 
-
-// Parse pdu segment and update rx.resegmentation_queue.
-// Add whole pdus to rx.reordering_queue
-static bool
-rlc_am_parse_resegmented(rlc_am_rx_state &rx, packet &pdu_resegmented) {
-  return false;
-}
-
-// Parse pdu and add to rx.reordering_queue
-static bool
-rlc_am_parse_full(rlc_am_rx_state &rx, packet &pdu_full) {
-  return true;
-}
-
-
-
 // Parse RLC status feedback
 static rlc_am_sn
 rlc_am_parse_status(packet &pdu_status, vector<rlc_am_nack> &nacks) {
@@ -804,18 +754,6 @@ rlc_am_rx_new_packet(rlc_am_rx_state &rx, packet &pdu) {
   rlc_am_rx_new_data(rx);
 
   // Any new SDUs are now waiting in rx.sdus
-}
-
-static vector<uint8_t>
-operator+(const vector<uint8_t> &lhs, const vector<uint8_t> &rhs) {
-  vector<uint8_t> dest(lhs.size() + rhs.size());
-  dest.insert(dest.end(), lhs.begin(), lhs.end());
-  dest.insert(dest.end(), rhs.begin(), rhs.end());
-  return dest;
-}
-static void
-operator+=(vector<uint8_t> &lhs, const vector<uint8_t> &rhs) {
-  lhs.insert(lhs.end(), rhs.begin(), rhs.end());
 }
 
 static void
@@ -1050,14 +988,6 @@ rlc_am_make_packet(rlc_am_tx_state &state, size_t requested_bytes, std::function
  **
  **/
 
-static rlc_am_sn
-rlc_am_get_sequence_number(packet &pdu) {
-  bits header = pdu.data();
-  assert(header/2 == 2);
-  header/1; // skip status request bit
-  return header/rlc_am_sn::width;
-}
-
 struct decoded_data_pdu {
   rlc_am_sn sn;
   bool poll;
@@ -1094,78 +1024,6 @@ rlc_am_tx_pdu_contents::decode(packet &pdu) {
   BOOST_FOREACH(auto &sdu, sdus) {
     memcpy(sdu.data(), p, sdu.size());
     p += sdu.size();
-  }
-}
-
-static void
-rlc_am_decode_packet(rlc_am_rx_state &rx, packet &pdu) {
-  std::ostream &cdbg = cerr;
-
-  bits header = pdu.data();
-  bool is_control = header/1;
-  if (is_control) {
-    // DATA PDU
-    bool reseg = header/1;
-    bool poll = header/1;
-    if (poll) {
-      rx.tx_state->status_requested = poll;
-    }
-    bool f0 = header/1, f1 = header/1, ext = header/1;
-    rlc_am_sn sequence_number = header/rlc_am_sn::width;
-    cdbg << "Recv: SN=" << sequence_number.value;
-
-    vector<size_t> lengths;
-    while(ext) {
-      ext = header/1;
-      lengths.push_back(header/RLC_AM_LENGTH_FIELD_SIZE);
-    }
-    size_t data_offset = bits_to_bytes(header.read_offset);
-    size_t implicit_length = pdu.size() - data_offset - std::accumulate(lengths.begin(), lengths.end(), 0);
-    lengths.push_back(implicit_length);
-
-    if (!reseg) {
-      // NORMAL DATA
-      for(size_t i = 0; i < lengths.size(); ++i) {
-	cdbg << " " << ((f0 && i == 0)?"+":"") << lengths[i] << ((f1 && i == lengths.size()-1)?"+":"");
-      }
-      cdbg << endl;
-    } else {
-      // RESEGMENTED PACKET
-      bool end_of_pdu_included = header/1;
-      size_t segment_offset = header/RLC_AM_SEGMENT_OFFSET_SIZE;
-      cdbg << ":" << segment_offset << "-" << (segment_offset + implicit_length - 1);
-      if(!end_of_pdu_included) {
-        cdbg << "+";
-      }
-      cdbg << " " << endl;
-    }
-  }
-  else
-  {
-    //CONTROL PDU
-    unsigned cpt = header/3;
-    if(cpt != 0x0) {
-      // Undefined at the time of writing. Must be discarded per specification
-      cdbg << "Recv: Discarded unknown CONTROL PDU: cpt=" << cpt << endl;
-    } else {
-      cdbg << "Recv: STATUS";
-      rlc_am_sn ack_sn = header/rlc_am_sn::width;
-      cdbg << " ACK=" << ack_sn.value;
-      bool e1 = header/1;
-      bool e2 = false;
-      while(e1) {
-	rlc_am_sn nack_sn = header/rlc_am_sn::width;
-	cdbg << " NACK=" << nack_sn.value;
-	e1 = header/1;
-	e2 = header/1;
-	if (e2) {
-	  size_t segment_offset_start = header/15;
-	  size_t segment_offset_end = header/15;
-	  cdbg << ":" << segment_offset_start << "-" << segment_offset_end;
-	}
-      }
-      cdbg << endl;
-    }
   }
 }
 
