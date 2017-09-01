@@ -36,7 +36,7 @@ rlc_pdu_send_opportunity(RLC *rlc,unsigned time_in_ms, void *buffer, int size) {
 }
 
 void
-rlc_pdu_received(RLC *rlc, unsigned time_in_ms, void *buffer, int size) {
+rlc_pdu_received(RLC *rlc, unsigned time_in_ms, const void *buffer, int size) {
   return rlc->sdu_recv(rlc->arg, time_in_ms, buffer, size);
 }
 

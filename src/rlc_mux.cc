@@ -37,7 +37,6 @@
 #include "rlc.h"
 
 /* My C++ helpers */
-#include "cpp_socket.hh"
 #include "math.hh"
 #include "bitfield.hh"
 
@@ -66,6 +65,8 @@ static bool rlc_debug = false;
 
 
 
+typedef vector<uint8_t> packet;
+const packet empty_packet;
 typedef sequence_number<RLC_AM_SEQUENCE_NUMBER_FIELD_SIZE> rlc_am_sn;
 
 
