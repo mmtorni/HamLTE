@@ -23,6 +23,7 @@ static int tun_alloc(char *dev, int *flags) {
   if( (fd = open(clonedev, O_RDWR)) < 0 ) { return fd; }
   if (*dev) { strncpy(ifr.ifr_name, dev, IFNAMSIZ); }
 
+  /* Try opening first TUN then TAP mode for ease of use */
   ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
   if( (err = ioctl(fd, TUNSETIFF, (void *) &ifr)) < 0 ) {
     ifr.ifr_flags = IFF_TAP;
@@ -30,6 +31,14 @@ static int tun_alloc(char *dev, int *flags) {
       close(fd); return err;
     }
   }
+  /* Set non-blocking mode */
+  if((err = fcntl(fd, F_SETFL, O_NONBLOCK)) < 0) {
+    int saved_errno = errno;
+    close(fd);
+    errno = saved_errno;
+    return err;
+  }
+
   strcpy(dev, ifr.ifr_name);
   return fd;
 }
@@ -49,7 +58,7 @@ pdcp_tun_send(void *arg, unsigned time_in_ms, const void *buffer, size_t size) {
   struct pdcp_tun *s = (struct pdcp_tun *)arg;
   const uint8_t *p = buffer;
   p += s->pdcp_data_header_in_bytes;
-  int retval = send(s->fd, buffer, size - s->pdcp_data_header_in_bytes, MSG_DONTWAIT);
+  int retval = write(s->fd, buffer, size - s->pdcp_data_header_in_bytes);
   if (retval == -1 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
     // Just drop the packet
   } else {
@@ -61,7 +70,7 @@ static int
 pdcp_tun_recv(void *arg, unsigned time_in_ms, void *buffer, size_t size) {
   struct pdcp_tun *s = (struct pdcp_tun *)arg;
   size_t h = s->pdcp_data_header_in_bytes;
-  int retval = recv(s->fd, buffer + h, min(size - h, s->max_sdu_size), MSG_DONTWAIT);
+  int retval = read(s->fd, buffer + h, min(size - h, s->max_sdu_size));
   if (retval == -1 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
     return -1;
   } else if (retval == -1) {
