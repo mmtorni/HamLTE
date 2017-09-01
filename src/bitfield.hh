@@ -69,7 +69,7 @@ struct sequence_number {
   sequence_number(unsigned i) : value(i%(1u<<WidthInBits)) { }
   sequence_number operator+(int i) const { return value + (unsigned)i; }
   sequence_number &operator+=(int i) { return *this = (*this + i); }
-  sequence_number operator++(int) { return this->value++; }
+  sequence_number operator++(int) { unsigned oldvalue = value; *this += 1; return oldvalue; }
   sequence_number &operator++() { *this += 1; return *this; }
   sequence_number &operator--() { *this += -1; return *this; }
   bool operator<(sequence_number<WidthInBits> rhs) const { return rhs - *this > 0; }
