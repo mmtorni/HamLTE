@@ -1,7 +1,8 @@
 // 3GPP LTE RLC: 4G Radio Link Control protocol interface
 
-#include <stddef.h> // For size_t
 
+#if !defined(CFFI_PARSE)
+#include <stddef.h> // For size_t
 #if defined _WIN32 || defined __CYGWIN__
   #ifdef BUILDING_DLL
     #ifdef __GNUC__
@@ -25,6 +26,10 @@
     #define DLL_PUBLIC
     #define DLL_LOCAL
   #endif
+#endif
+#else
+#define DLL_PUBLIC
+#define DLL_LOCAL
 #endif
 
 #ifdef __cplusplus

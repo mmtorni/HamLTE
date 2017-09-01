@@ -21,7 +21,11 @@ ffi = FFI()
 def load_c_module(header, libso):
   global c_modules
   L = []
-  for line in open(header).readlines():
+  # Preprocess to remove most symbols
+  import subprocess
+  proc = subprocess.Popen(["gcc", "-E", "-DCFFI_PARSE", "-"], stdin=open(header), stdout=subprocess.PIPE)
+  for line in proc.stdout.readlines():
+    line = line.decode("UTF-8")
     if re.match(r"#|extern|}", line):
       continue
     L.append(line)
@@ -58,9 +62,9 @@ def sdu_send_opportunity(arg, ms, buf, size):
   pdu = "Hei" + str(num)
   pdu = pdu.encode("UTF-8")
   if arg == rlc2:
-    #pdu = b""
+    pdu = b""
     print("        %s<-: Requested SDU (max %d bytes): %s" % (arg_to_name(arg), size, pdu))
-    #return -1
+    return -1
   else:
     print("->%s          : Requested SDU (max %d bytes): %s" % (arg_to_name(arg), size, pdu))
   buf[0:len(pdu)] = pdu
@@ -95,7 +99,7 @@ def sdu_rlf(arg, ms):
 
 parameters = envz(*sys.argv[2:], a=3)
 
-packet_loss_probability = .25
+packet_loss_probability = .5
 
 rlc1, rlc2 = rlc_init(), rlc_init()
 rlc_am_set_callbacks(rlc1, rlc1, sdu_send_opportunity, sdu_received, sdu_delivered, sdu_rlf)
@@ -121,7 +125,7 @@ for ms in itertools.count(step=1):
   else:
     print("  RLC1        : PDU %d/%d bytes: %r" % (got, so_size, pdu.decode("latin1")))
 
-  time.sleep(.010)
+  time.sleep(.250)
 
   rlc_timer_tick(rlc2, ms)
   so_size = len(buf)
@@ -133,7 +137,7 @@ for ms in itertools.count(step=1):
   else:
     print("        RLC2  : PDU %d/%d bytes: %r" % (got, so_size, pdu.decode("latin1")))
 
-  time.sleep(.010)
+  time.sleep(.250)
   
   
 # Reset to get final packets, if any
