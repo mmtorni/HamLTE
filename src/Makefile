@@ -1,11 +1,11 @@
 CPPFLAGS=-Wall -g -O2
-CXXFLAGS=-fPIC -std=gnu++17 -fvisibility=hidden
+CXXFLAGS=-fPIC -std=gnu++17 -fvisibility=hidden -fvisibility-inlines-hidden
 CFLAGS=-fPIC
-LDFLAGS=-g -lefence
+LDFLAGS=-g
 
 .PHONY : all
 
-all: rlc_mux.so rlc_tm.so
+all: rlc_mux.so rlc_tm.so pdcp_tuntap_callbacks.so
 
 %: %.cc
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(LOADLIBES) $(LDFLAGS) -lstdc++ $^ -o $@
