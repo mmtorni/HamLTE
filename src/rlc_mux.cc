@@ -1102,7 +1102,10 @@ rlc_pdu_send_opportunity(RLC *rlc, unsigned time_in_ms, void *buffer, int size) 
   rlc->state.set_time(time_in_ms);
   auto pull = [=](size_t max_size) {
     packet sdu(max_size);
-    int size = rlc->sdu_send(rlc->arg, time_in_ms, sdu.data(), max_size);
+    int size = -1;
+    if (rlc->sdu_send) {
+      size = rlc->sdu_send(rlc->arg, time_in_ms, sdu.data(), max_size);
+    }
     sdu.resize((size==-1)?0:size);
     return sdu;
   };
@@ -1127,7 +1130,9 @@ rlc_pdu_received(RLC *rlc, unsigned time_in_ms, const void *buffer, int size) {
     auto &sdus = rlc->state.rx.sdus;
     while (!sdus.empty()) {
       const auto &sdu = sdus.front();
-      rlc->sdu_recv(rlc->arg, time_in_ms, sdu.data(), sdu.size());
+      if (rlc->sdu_recv) {
+        rlc->sdu_recv(rlc->arg, time_in_ms, sdu.data(), sdu.size());
+      }
       sdus.pop();
     }
   }
@@ -1136,7 +1141,9 @@ rlc_pdu_received(RLC *rlc, unsigned time_in_ms, const void *buffer, int size) {
     auto &sdus = rlc->state.tx.delivered_sdus;
     while (!sdus.empty()) {
       const auto &sdu = sdus.front();
-      rlc->sdu_delivered(rlc->arg, time_in_ms, sdu.data(), sdu.size());
+      if (rlc->sdu_delivered) {
+        rlc->sdu_delivered(rlc->arg, time_in_ms, sdu.data(), sdu.size());
+      }
       sdus.pop();
     }
   }

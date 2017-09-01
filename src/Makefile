@@ -1,7 +1,7 @@
-CPPFLAGS=-Wall -g
-CXXFLAGS=-fPIC -std=gnu++17
+CPPFLAGS=-Wall -g -O2
+CXXFLAGS=-fPIC -std=gnu++17 -fvisibility=hidden
 CFLAGS=-fPIC
-LDFLAGS=-g
+LDFLAGS=-g -lefence
 
 .PHONY : all
 
