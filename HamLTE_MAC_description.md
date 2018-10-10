@@ -8,20 +8,20 @@ HARQ happens in the MAC layer. HARQ does give feedback to upper layers though.
 
 MAC can transport the following upper layer messages
 
-        | TxType    |      | Type    | PHY channels DL | PHY channels UL | Headers? | LCID
-        +-----------+------+---------+-----------------+-----------------+----------+-------
+Type    | TxType    |      | Type    | PHY channels DL | PHY channels UL | Headers? | LCID
+--------|-----------|------|---------|-----------------|-----------------|----------|-------
 SI-RNTI | Broadcast | BCCH | Control | BCH, DL-SCH     | -               | No       | 
 P-RNTI  | Paging    | PCCH | Control | PCH             |                 | No       |
 C-RNTI  | Common    | CCCH | Control | DL-SCH          | UL-SCH          | Yes      |
 C-RNTI  | Unicast   | DCCH | Control | DL-SCH          | UL-SCH          | Yes      |
-        | Multicast | MCCH | Control | MCH             | -               | Yes      |
-        + ----------+------+---------+-----------------+-----------------+----------+-------
+        | Multicast | MCCH | Control | MCH             | -               | Yes      |
+--------|-----------|------|---------|-----------------|-----------------|----------|-------
 C-RNTI  | Unicast   | DTCH | Data    | DL-SCH          | UL-SCH          | Yes      |
-        | Multicast | MTCH | Data    | MCH             | -               | Yes      |
+        | Multicast | MTCH | Data    | MCH             | -               | Yes      |
 
-Headers?: If no headers are transmitted, then the packet is unmodified by the MAC layer.
-          If headers are transmitted, then the MAC may send zero or more control elements
-          followed by zero or more data packets.
+    Headers?: If no headers are transmitted, then the packet is unmodified by the MAC layer.
+              If headers are transmitted, then the MAC may send zero or more control elements
+              followed by zero or more data packets.
 
 One transport block per subframe per HARQ process can be sent.  Only in the
 case of spatial multiplexing can two transport blocks per HARQ process be sent.
@@ -41,17 +41,19 @@ If 1-2 bytes of padding are required, that is done with the padding headers in f
 
 MAC layer generates and absorbs the following messages:
 
+Type    | TxType    |      | Type    | PHY channels DL | PHY channels UL | Headers? | LCID
+--------|-----------|------|---------|-----------------|-----------------|----------|-------
 RA-RNTI | Unicast   |      | Control | DL-SCH          | -
 M-RNTI  | ?         |      | Control | -               | -
 
 PHY layer generates and absorbs the following messages:
 
-TPC-PUCCH-RNTI
-TPC-PUSCH-RNTI
+    TPC-PUCCH-RNTI
+    TPC-PUSCH-RNTI
 
 Random notes
 ------------
-class ServingCell:
-  broadcastHarqProcess
-  dlHarqProcesses[8-16]
+    class ServingCell:
+      broadcastHarqProcess
+      dlHarqProcesses[8-16]
   
