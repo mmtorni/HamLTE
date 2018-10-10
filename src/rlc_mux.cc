@@ -4,7 +4,6 @@
 /*
   TODO: Only 10 bit sequence numbers and 15 bit segment offsets are implemented
   TODO: Only 11 bit length fields are implemented
-  TODO: Retransmit and poll timers
   TODO: Sequence numbers sometimes get stuck at 1023 (highest value)
  */
 #include <cstdio>
